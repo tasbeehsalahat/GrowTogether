@@ -1,18 +1,17 @@
-// استيراد المكتبة
+// index.js
 const express = require('express');
+const connectDB = require('./src/modules/DB/connection.js'); // Import the connectDB function
 
-// إنشاء تطبيق E
 const app = express();
-
-// تحديد منفذ التشغيل
 const PORT = 3000;
 
-// إعداد مسار للتحقق من الاتصال
-app.get('/', (req, res) => {
-  res.send('Connection is successful!');
-});
+// Connect to MongoDB
+connectDB();
+app.use(express.json());
 
-// بدء تشغيل السيرفر
+
+
+// Start the server
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
 });
