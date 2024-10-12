@@ -1,7 +1,7 @@
 // استيراد المكتبة
 const express = require('express');
 
-// إنشاء تطبيق Express
+// إنشاء تطبيق E
 const app = express();
 
 // تحديد منفذ التشغيل
