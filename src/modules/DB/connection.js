@@ -3,9 +3,7 @@ const mongoose = require('mongoose');
 require('dotenv').config();
 
 // Use the MongoDB URI from the .env file
-const uri = process.env.MONGODB_URI ; // Default to local if not specified
-
-// Function to connect to MongoDB
+const uri = process.env.MONGODB_URI ;
 const connectDB = async () => {
     try {
         // Remove deprecated options
