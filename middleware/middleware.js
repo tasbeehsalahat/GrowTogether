@@ -11,7 +11,7 @@ const authenticateJWT = async (req, res, next) => {
 
     jwt.verify(token, JWT_SECRET_KEY, async (err, decoded) => {
         if (err) {
-            return res.status(403).json({ message: 'Forbidden. Invalid token.' });
+            return res.status(403).json({ message: 'Forbidden.ERROR.' });
         }
 
         try {
