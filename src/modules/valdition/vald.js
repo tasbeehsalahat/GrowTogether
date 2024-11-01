@@ -54,4 +54,59 @@ const signupSchema = Joi.object({
     })
 });
 
-module.exports = signupSchema;
+const workerSignupSchema = Joi.object({
+    email: Joi.string().email().required().messages({
+        'string.email': `"Email" must be a valid email address`,
+        'any.required': `"Email" is a required field`
+    }),
+    password: Joi.string().min(8)
+        .pattern(new RegExp("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]{8,}$"))
+        .required().messages({
+            'string.min': `"Password" should have at least 8 characters`,
+            'string.pattern.base': `"Password" must contain at least one uppercase letter, one lowercase letter, one number, and one special character`,
+            'any.required': `"Password" is a required field`
+        }),
+    confirmPassword: Joi.any().valid(Joi.ref('password')).required().messages({
+        'any.only': `"Confirm Password" must match the password`,
+        'any.required': `"Confirm Password" is a required field`
+    }),
+    userName: Joi.string().min(3).max(50).required().messages({
+        'string.min': `"User Name" should have at least 3 characters`,
+        'any.required': `"User Name" is a required field`
+    }),
+    yearsOfExperience: Joi.number().integer().min(0).required().messages({
+        'number.base': `"Years of Experience" must be a number`,
+        'number.min': `"Years of Experience" must be at least 0`,
+        'any.required': `"Years of Experience" is a required field`
+    }),
+    placeOfResidence: Joi.string().required().messages({
+        'string.empty': `"Place of Residence" cannot be empty`,
+        'any.required': `"Place of Residence" is a required field`
+    }),
+    areasAvailableToTravel: Joi.array().items(Joi.string()).required().messages({
+        'array.base': `"Areas Available to Travel" should be an array of strings`,
+        'any.required': `"Areas Available to Travel" is a required field`
+    }),
+    availableDays: Joi.array().items(Joi.string()).required().messages({
+        'array.base': `"Available Days" should be an array of strings`,
+        'any.required': `"Available Days" is a required field`
+    }),
+    workingHours: Joi.string().required().messages({
+        'string.empty': `"Working Hours" cannot be empty`,
+        'any.required': `"Working Hours" is a required field`
+    }),
+});
+
+const loginSchema = Joi.object({
+    email: Joi.string().email().required().messages({
+        'string.email': `"Email" must be a valid email address`,
+        'any.required': `"Email" is a required field`
+    }),
+    password: Joi.string().min(8).required().messages({
+        'string.min': `"Password" should have at least 8 characters`,
+        'any.required': `"Password" is a required field`
+    }),
+});
+
+
+module.exports = {signupSchema,workerSignupSchema,loginSchema};

@@ -14,5 +14,17 @@ const ownerSchema = new mongoose.Schema({
 }, { collection: 'Owner' });
 
 const Owner = mongoose.model('Owner', ownerSchema);
+const workerSchema = new mongoose.Schema({
+    email: { type: String, required: true, unique: true },
+    password: { type: String, required: true },
+    userName: { type: String, required: true },
+    yearsOfExperience: { type: Number, required: true },
+    placeOfResidence: { type: String, required: true },
+    areasAvailableToTravel: { type: [String], required: true },  // Array of areas
+    availableDays: { type: [String], required: true },           // Array of days
+    workingHours: { type: String, required: true },
+}, { collection: 'Worker' });
 
-module.exports =Owner;
+const Worker = mongoose.model('Worker', workerSchema);
+
+module.exports ={Owner,Worker};
