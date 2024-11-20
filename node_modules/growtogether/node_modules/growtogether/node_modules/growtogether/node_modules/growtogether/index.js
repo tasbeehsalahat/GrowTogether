@@ -4,7 +4,7 @@ const connectDB = require('./src/modules/DB/connection.js'); // Import the conne
 const dotenv = require('dotenv');
 dotenv.config()
 const app = express();
-const PORT = 3008;
+const PORT = 3003;
 const auth =require('./src/modules/auth/auth.js');
 // Connect to MongoDB
 connectDB();

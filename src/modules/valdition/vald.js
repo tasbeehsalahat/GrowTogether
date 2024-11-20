@@ -33,24 +33,6 @@ const signupSchema = Joi.object({
         'string.empty': `"Contact Number" cannot be empty`,
         'string.pattern.base': `"Contact Number" should contain only numbers and be between 10 and 15 digits`,
         'any.required': `"Contact Number" is a required field`
-    }),
-    landArea: Joi.number().positive().required().messages({
-        'number.base': `"Land Area" should be a number`,
-        'number.positive': `"Land Area" must be a positive number`,
-        'any.required': `"Land Area" is a required field`
-    }),
-    location: Joi.string().required().messages({
-        'string.empty': `"Location" cannot be empty`,
-        'any.required': `"Location" is a required field`
-    }),
-    description: Joi.string().max(500).required().messages({
-        'string.max': `"Description" cannot exceed 500 characters`
-    }),
-    suggestion: Joi.string().max(500).optional().messages({
-        'string.max': `"Suggestion" cannot exceed 500 characters`
-    }),
-    image: Joi.string().uri().optional().messages({
-        'string.uri': `"Image" must be a valid URL`
     })
 });
 
@@ -74,27 +56,21 @@ const workerSignupSchema = Joi.object({
         'string.min': `"User Name" should have at least 3 characters`,
         'any.required': `"User Name" is a required field`
     }),
-    yearsOfExperience: Joi.number().integer().min(0).required().messages({
-        'number.base': `"Years of Experience" must be a number`,
-        'number.min': `"Years of Experience" must be at least 0`,
-        'any.required': `"Years of Experience" is a required field`
+    skills: Joi.array().items(
+        Joi.string().min(1).required().messages({
+            'string.min': `"Skill" cannot be empty`,
+            'any.required': `"Skill" is required`
+        })
+    ).min(1).required().messages({
+        'array.min': `"Skills" must include at least one skill`,
+        'any.required': `"Skills" is a required field`
     }),
-    placeOfResidence: Joi.string().required().messages({
-        'string.empty': `"Place of Residence" cannot be empty`,
-        'any.required': `"Place of Residence" is a required field`
-    }),
-    areasAvailableToTravel: Joi.array().items(Joi.string()).required().messages({
-        'array.base': `"Areas Available to Travel" should be an array of strings`,
-        'any.required': `"Areas Available to Travel" is a required field`
-    }),
-    availableDays: Joi.array().items(Joi.string()).required().messages({
-        'array.base': `"Available Days" should be an array of strings`,
-        'any.required': `"Available Days" is a required field`
-    }),
-    workingHours: Joi.string().required().messages({
-        'string.empty': `"Working Hours" cannot be empty`,
-        'any.required': `"Working Hours" is a required field`
-    }),
+    contactNumber: Joi.string().pattern(/^[0-9]{10,15}$/).required().messages({
+        'string.empty': `"Contact Number" cannot be empty`,
+        'string.pattern.base': `"Contact Number" should contain only numbers and be between 10 and 15 digits`,
+        'any.required': `"Contact Number" is a required field`
+    })
+
 });
 
 const loginSchema = Joi.object({
