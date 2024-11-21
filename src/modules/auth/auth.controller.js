@@ -5,8 +5,10 @@ const mongoose = require('mongoose');
 const multer = require('multer');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken'); 
-const {signupSchema,workerSignupSchema,loginSchema} = require('../valdition/vald.js');
+const {signupSchema,workerSignupSchema,loginSchema,validateProfileUpdate} = require('../valdition/vald.js');
 const {Owner,Worker,Token} = require('../DB/types.js');  // تأكد من أن المسار صحيح
+const {validation}=require('../valdition/vald.js');
+const JWT_SECRET_KEY = '1234#';  // نفس المفتاح السري الذي ستستخدمه للتحقق من التوكن
 
 const signupowner= async (req, res) => {
     const { error } = signupSchema.validate(req.body, { abortEarly: false });
@@ -119,9 +121,12 @@ const login = async (req, res) => {
         const isMatch = await bcrypt.compare(password, user.password);
 
         if (!isMatch) {
-            return res.status(400).json({ message: 'Invalid credentials' });
+            return res.status(400).json({ message: 'Invalid Email or Password' });
         }
-        const token = jwt.sign({ id: user._id, email: user.email }, 'secretKey', { expiresIn: '1h' });
+        // const token = jwt.sign({ id: user._id, email: user.email }, 'secretKey', { expiresIn: '1h' });
+        const payload = { email: req.body.email }; // البيانات التي تريد تضمينها في التوكن
+const token = jwt.sign(payload, JWT_SECRET_KEY, { expiresIn: '1h' }); // انشئ التوكن هنا
+
  const existingToken = await Token.findOne({ email });  // Check if the token already exists for the user
  if (existingToken) {
      existingToken.token = token;  // Update the token if it already exists
@@ -150,7 +155,7 @@ const login = async (req, res) => {
 };
 
 
-const Myprofile = async (req, res) => {
+const profile = async (req, res) => {
     try {
         const { email, username } = req.query;  // Extract email or userName from query parameters
 
@@ -186,11 +191,70 @@ const Myprofile = async (req, res) => {
     }
 };
 
-const updateprofile=async (req,res)=>{
+const updateprofile = async (req, res) => {
+    try {
+        if (!req.body || Object.keys(req.body).length === 0) {
+            return res.status(400).json({ message: 'Please enter what you want to update' });
+        }
 
+        const updates = req.body; // بيانات التحديث من البودي
+        let email = req.params.email; // الإيميل من الرابط
+        email = email.replace(":", ""); // إزالة أي نقاط في الإيميل إذا كانت موجودة في الرابط
 
+        if (req.user.email !== email) {
+            return res.status(403).json({ message: 'You can only update your own profile.' });
+        }
+        console.log(req.user.email);
 
-    
+        const Model = req.user.role === 'Worker' ? Worker : Owner;
+
+        const validation = validateProfileUpdate(updates, Model); // استدعاء الدالة بشكل صحيح
+        if (validation.error) {
+            return res.status(400).json({ message: validation.error });
+        }
+
+        const updatedProfile = validation.value;
+
+        const updatedUser = await Model.findOneAndUpdate(
+            { email },
+            { $set: updatedProfile },
+            { new: true }
+        );
+
+        if (!updatedUser) {
+            return res.status(404).json({ message: 'User not found.' });
+        }
+
+        return res.status(200).json({
+            message: 'Profile updated successfully.',
+        });
+    } catch (error) {
+        console.error('Error updating profile:', error);
+        return res.status(500).json({ message: 'Internal server error.' });
+    }
 };
+const logout = async (req, res) => {
+    try {
+        // Extract the token from the Authorization header
+        const token = req.header('Authorization'); // Ensure only the token is extracted
+        
+        if (!token) {
+            return res.status(401).json({ message: 'Unauthorized. No token provided.' });
+        }
 
-module.exports = { login, signupowner,signupWorker,Myprofile,updateprofile};
+        // Remove the token from the MongoDB collection
+        const result = await Token.deleteOne({ token: token });
+
+        if (result.deletedCount === 0) {
+            return res.status(404).json({ message: 'Token not found or already logged out.' });
+        }
+
+        return res.status(200).json({
+            message: "Logout successful...See you soon!"
+        });
+    } catch (err) {
+        console.error('Error during logout:', err);
+        res.status(500).json({ error: 'An error occurred while logging out.' });
+    }
+};
+module.exports = { login, signupowner,signupWorker,profile,updateprofile,logout};

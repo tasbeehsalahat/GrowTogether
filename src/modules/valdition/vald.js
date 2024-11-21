@@ -84,5 +84,80 @@ const loginSchema = Joi.object({
     }),
 });
 
+const validateProfileUpdate = (userData, role) => {
+    let schema;
+    if (role === 'Owner') {
+        schema = Joi.object({
+            email: Joi.string().email().optional().messages({
+                'string.email': `"Email" must be a valid email address`
+            }),
+            username: Joi.string().min(3).optional().messages({
+                'string.min': `"Username" should have at least 3 characters`
+            }),
+            contactNumber: Joi.string().min(10).max(15).optional().messages({
+                'string.min': `"Contact Number" should have at least 10 characters`,
+                'string.max': `"Contact Number" can have a maximum of 15 characters`
+            }),
+            password: Joi.string()
+                .min(8)
+                .pattern(new RegExp("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]{8,}$"))
+                .optional()
+                .messages({
+                    'string.min': `"Password" should have at least 8 characters`,
+                    'string.pattern.base': `"Password" must contain at least one uppercase letter, one lowercase letter, one number, and one special character`
+                }),
+            confirmpassword: Joi.any().valid(Joi.ref('password')).optional().messages({
+                'any.only': `"Confirm Password" must match the password`
+            }),
+            ownerName: Joi.string().min(3).max(50).optional().messages({
+                'string.min': `"Owner Name" should have at least 3 characters`,
+                'string.max': `"Owner Name" should have at most 50 characters`
+            }),
+        });
+    } 
+     if (role === 'Worker') {
+        schema = Joi.object({
+            email: Joi.string().email().optional().messages({
+                'string.email': `"Email" must be a valid email address`
+            }),
+            password: Joi.string()
+                .min(8)
+                .pattern(new RegExp("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]{8,}$"))
+                .optional()
+                .messages({
+                    'string.min': `"Password" should have at least 8 characters`,
+                    'string.pattern.base': `"Password" must contain at least one uppercase letter, one lowercase letter, one number, and one special character`
+                }),
+            confirmPassword: Joi.any().valid(Joi.ref('password')).optional().messages({
+                'any.only': `"Confirm Password" must match the password`
+            }),
+            userName: Joi.string().min(3).max(50).optional().messages({
+                'string.min': `"User Name" should have at least 3 characters`,
+                'string.max': `"User Name" should have at most 50 characters`
+            }),
+            skills: Joi.array().items(
+                Joi.string().min(1).optional().messages({
+                    'string.min': `"Skill" cannot be empty`
+                })
+            ).min(1).optional().messages({
+                'array.min': `"Skills" must include at least one skill`
+            }),
+            contactNumber: Joi.string().pattern(/^[0-9]{10,15}$/).optional().messages({
+                'string.pattern.base': `"Contact Number" should contain only numbers and be between 10 and 15 digits`
+            }),
+        });
+    } else {
+        console.log('dkfkv,m');
+        return { error: 'Invalid role' }; 
+    }
+    const { error, value } = schema.validate(userData, { abortEarly: false });
+    if (error) {
+        return { error: error.details.map(err => err.message).join(", ") };
+    }
 
-module.exports = {signupSchema,workerSignupSchema,loginSchema};
+    return { value };
+};
+
+
+
+module.exports = {signupSchema,workerSignupSchema,loginSchema,validateProfileUpdate};

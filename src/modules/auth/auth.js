@@ -16,10 +16,25 @@ const serviceAccount = require('../firebase/firebase.json');
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
 });
+const {authenticateJWT}=require('../middleware/middleware.js')
 const upload = multer({ storage: storage });
-const { signupowner,Myprofile, login,signupWorker,updateprofile} = require('../auth/auth.controller.js');
+const { signupowner,profile, login,signupWorker,updateprofile,logout} = require('../auth/auth.controller.js');
 const router = express.Router();
-router.post('/login', login); 
+const rateLimit = require('express-rate-limit');
+
+// تحديد معدل الحد
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // مدة الـ 15 دقيقة (بالميللي ثانية)
+  max: 5, // الحد الأقصى لمحاولات تسجيل الدخول (مثلاً 5 محاولات)
+  message: (req, res) => {
+    return res.json({
+      message: 'Too many login attempts from this IP, please try again after 15 minutes'
+    });
+  },
+    standardHeaders: true, // إضافة معلومات إلى رؤوس الاستجابة
+  legacyHeaders: false, // تعطيل بعض الرؤوس القديمة
+});
+router.post('/login', loginLimiter,login); 
 router.post('/signupowner', signupowner);
 router.post('/signupworker', signupWorker);
 router.post('/send-verification-code', (req, res) => {
@@ -48,6 +63,8 @@ router.post('/verify-code', (req, res) => {
         res.status(500).json({ success: false, message: "Failed to verify OTrP" });
       });
   });
-  router.get('/myprofile',Myprofile);
-  router.patch('/updateprofile',updateprofile)
+  router.get('/profile',profile);
+  router.patch('/update/:email',authenticateJWT,updateprofile);
+  router.get('/logout',authenticateJWT,logout);
+
 module.exports = router; 

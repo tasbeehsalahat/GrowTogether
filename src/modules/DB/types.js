@@ -7,7 +7,9 @@ const ownerSchema = new mongoose.Schema({
   
 
     ownerName: { type: String, required: true },
-    contactNumber: { type: String, required: true }
+    contactNumber: { type: String, required: true },
+    role: { type: String, default: 'Owner' }  // إضافة حقل role
+
 }, { collection: 'Owner' });
 
 const Owner = mongoose.model('Owner', ownerSchema);
@@ -38,13 +40,14 @@ const workerSchema = new mongoose.Schema({
             message: 'Some skills are not valid or are not related to farming.'
         }
     },
-    contactNumber: { type: String, required: true }
+    contactNumber: { type: String, required: true },
+    role: { type: String, default: 'Worker' }  // إضافة حقل role
+
 
 }, { collection: 'Worker' });
 
 
 const Worker = mongoose.model('Worker', workerSchema);
-// Define the Token schema
 const tokenSchema = new mongoose.Schema({
     email: { type: String, required: true, unique: true }, // The email address
     token: { type: String, required: true ,unique: true }, // The generated token
