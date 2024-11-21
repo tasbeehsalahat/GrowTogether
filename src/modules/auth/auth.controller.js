@@ -1,5 +1,3 @@
-
-
 const express = require('express');
 const mongoose = require('mongoose');
 const multer = require('multer');
@@ -9,7 +7,6 @@ const {signupSchema,workerSignupSchema,loginSchema,validateProfileUpdate} = requ
 const {Owner,Worker,Token} = require('../DB/types.js');  // تأكد من أن المسار صحيح
 const {validation}=require('../valdition/vald.js');
 const JWT_SECRET_KEY = '1234#';  // نفس المفتاح السري الذي ستستخدمه للتحقق من التوكن
-
 const signupowner= async (req, res) => {
     const { error } = signupSchema.validate(req.body, { abortEarly: false });
     if (error) {
@@ -97,7 +94,6 @@ const signupWorker = async (req, res) => {
 
 const login = async (req, res) => {
     try {
-        // التحقق من المدخلات باستخدام Joi
         const { error } = loginSchema.validate(req.body, { abortEarly: false });
         if (error) {
             const errorMessages = error.details.map(detail => detail.message);
@@ -116,18 +112,15 @@ const login = async (req, res) => {
         if (!user) {
             return res.status(404).json({ message: 'User not found' });
         }
-
-        // التحقق من صحة كلمة المرور
         const isMatch = await bcrypt.compare(password, user.password);
 
         if (!isMatch) {
             return res.status(400).json({ message: 'Invalid Email or Password' });
         }
-        // const token = jwt.sign({ id: user._id, email: user.email }, 'secretKey', { expiresIn: '1h' });
         const payload = { email: req.body.email }; // البيانات التي تريد تضمينها في التوكن
 const token = jwt.sign(payload, JWT_SECRET_KEY, { expiresIn: '1h' }); // انشئ التوكن هنا
 
- const existingToken = await Token.findOne({ email });  // Check if the token already exists for the user
+ const existingToken = await Token.findOne({ email }); 
  if (existingToken) {
      existingToken.token = token;  // Update the token if it already exists
      await existingToken.save();
@@ -135,7 +128,7 @@ const token = jwt.sign(payload, JWT_SECRET_KEY, { expiresIn: '1h' }); // انش�
      const newToken = new Token({ email, token });
      await newToken.save();
  }
-        const userName = user.userName || user.ownerName;  // إذا كان عامل نأخذ userName، وإذا كان صاحب نأخذ ownerName
+        const userName = user.userName || user.ownerName;  
         const role = user instanceof Owner ? 'owner' : 'worker'; // تحديد الدور
 
         const welcomeMessage = role === 'worker' 
@@ -235,14 +228,11 @@ const updateprofile = async (req, res) => {
 };
 const logout = async (req, res) => {
     try {
-        // Extract the token from the Authorization header
-        const token = req.header('Authorization'); // Ensure only the token is extracted
-        
+        const token = req.header('Authorization');
         if (!token) {
             return res.status(401).json({ message: 'Unauthorized. No token provided.' });
         }
 
-        // Remove the token from the MongoDB collection
         const result = await Token.deleteOne({ token: token });
 
         if (result.deletedCount === 0) {

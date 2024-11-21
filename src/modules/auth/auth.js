@@ -22,17 +22,16 @@ const { signupowner,profile, login,signupWorker,updateprofile,logout} = require(
 const router = express.Router();
 const rateLimit = require('express-rate-limit');
 
-// تحديد معدل الحد
 const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // مدة الـ 15 دقيقة (بالميللي ثانية)
-  max: 5, // الحد الأقصى لمحاولات تسجيل الدخول (مثلاً 5 محاولات)
+  windowMs: 15 * 60 * 1000, 
+  max: 5,
   message: (req, res) => {
     return res.json({
       message: 'Too many login attempts from this IP, please try again after 15 minutes'
     });
   },
     standardHeaders: true, // إضافة معلومات إلى رؤوس الاستجابة
-  legacyHeaders: false, // تعطيل بعض الرؤوس القديمة
+  legacyHeaders: false,
 });
 router.post('/login', loginLimiter,login); 
 router.post('/signupowner', signupowner);

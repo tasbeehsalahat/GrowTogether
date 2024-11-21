@@ -1,25 +1,23 @@
 const jwt = require('jsonwebtoken');
 
-// Middleware للتحقق من التوكن
+// Middleware to authenticate JWT
 const authenticateJWT = (req, res, next) => {
     const authHeader = req.headers['authorization'];
-    const token = authHeader; // استخراج التوكن من رأس الطلب
-
+    const token = authHeader;
+console.log( token);
     if (!token) {
         return res.status(401).json({ message: 'Token is required.' });
     }
-
     jwt.verify(token, 'secretKey', (err, user) => {
         if (err) {
-            console.log(err)
+            console.error('JWT Verification Error:', err);
             return res.status(403).json({ message: 'Invalid or expired token.' });
         }
 
-        req.user = user; // تمرير بيانات المستخدم إلى الطلب
-        next(); // المتابعة إلى الوظيفة التالية
+        req.user = user;
+        next();
     });
+
 };
 
-   
-
-module.exports = {authenticateJWT };
+module.exports = { authenticateJWT };
