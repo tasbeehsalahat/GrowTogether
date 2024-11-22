@@ -17,7 +17,7 @@ const bodyParser = require('body-parser');
 
 const {authenticateJWT}=require('../middleware/middleware.js')
 const upload = multer({ storage: storage });
-const { signupowner,profile, login,signupWorker,updateprofile,logout,getconfirm,sendconfirm,myprofile} = require('../auth/auth.controller.js');
+const { signupowner,profile,deactivationaccount, login,signupWorker,updateprofile,logout,getconfirm,sendconfirm,verifyResetCode,resetPassword,myprofile,deleteAccount,forgotPassword, updatePassword} = require('../auth/auth.controller.js');
 const router = express.Router();
 const rateLimit = require('express-rate-limit');
 
@@ -48,5 +48,11 @@ router.post('/confirm-account',getconfirm)
   router.patch('/update/:email',authenticateJWT,updateprofile);
   router.get('/logout',authenticateJWT,logout);
   router.get('/myprofile',authenticateJWT,myprofile);
+  router.delete('/delete-account/:email', authenticateJWT, deleteAccount);
+  router.patch('/update-password/:email', authenticateJWT, updatePassword);
+  router.post('/forgot-password',forgotPassword);
+  router.post('/verifyResetCode',verifyResetCode);
+  router.post('/resetPassword',resetPassword);
+  router.post('/deactiveaccount/:email',deactivationaccount);
 
 module.exports = router; 

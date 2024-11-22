@@ -36,7 +36,7 @@ const sendconfirm= async (req, res) => {
     const mailOptions = {
         from: 'tasbeehsa@gmail.com', // المرسل
         to: email,                   // المستلم
-        subject: 'VerificationCode',
+        subject: 'VerificationCode from GROW TOGETHER',
         text: `Your VerificationCode ${verificationCode}`
 
        
@@ -78,6 +78,7 @@ const getconfirm = async (req, res) => {
         return res.status(400).json({ "message": "The code is incorrect."});
     }
 };
+
 
 
 const signupowner= async (req, res) => {
@@ -405,6 +406,143 @@ const myprofile = async (req, res) => {
         return res.status(500).json({ message: 'Internal server error' });
     }
 };
+const deleteAccount = async (req, res) => {
+    const email = req.params.email;
+    const result = await User.deleteOne({ email });
+    if (result.deletedCount === 0) {
+        return res.status(404).json({ message: 'User not found.' });
+    }
+    res.status(200).json({ message: 'Account deleted successfully.' });
+};
+const updatePassword = async (req, res) => {
+    try {
+        const { oldPassword, newPassword } = req.body;
+        const { email } = req.params; // الحصول على الإيميل من الرابط
 
+        // التأكد من أن التوكن صالح وأنه يخص الإيميل المرسل
+        if (req.user.email !== email) {
+            return res.status(403).json({ message: 'Unauthorized. Token does not match the provided email.' });
+        }
 
-module.exports = { login, signupowner,signupWorker,profile,updateprofile,logout,sendconfirm,getconfirm,myprofile};
+        // البحث عن المستخدم بواسطة البريد الإلكتروني
+        const user = await User.findOne({ email });
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        // التحقق من كلمة المرور القديمة
+        const isMatch = await bcrypt.compare(oldPassword, user.password);
+        if (!isMatch) {
+            return res.status(400).json({ message: 'Old password is incorrect' });
+        }
+
+        // تحديث كلمة المرور
+        user.password = await bcrypt.hash(newPassword, 10);
+        await user.save();
+
+        res.status(200).json({ message: 'Password updated successfully' });
+    } catch (error) {
+        console.error('Error updating password:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+const forgotPassword = async (req, res) => {
+    const { email} = req.body;
+
+    const verificationCode = generateRandomCode() ;
+    // تخزين الكود مع تاريخ الانتهاء
+    const expirationTime = Date.now() + CODE_EXPIRATION_TIME;
+    verificationCodes[email] = { code: verificationCode, expiresAt: expirationTime };
+
+    const mailOptions = {
+        from: 'tasbeehsa@gmail.com', // المرسل
+        to: email,                   // المستلم
+        subject: 'VerificationCode from GROW TOGETHER',
+        text: `Your VerificationCode for reset password ${verificationCode}`
+
+       
+    };
+
+    try {
+        await transporter.sendMail(mailOptions);
+        res.status(200).json({   "message": "Verification code has been sent to the email."
+        });
+        
+        setTimeout(() => {
+            delete verificationCodes[email];
+        }, CODE_EXPIRATION_TIME);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({"message": "An error occurred while sending the email."});
+    }
+};
+const verifyResetCode = async (req, res) => {
+  
+    const { email, resetcode } = req.body;
+
+    if (!email || !resetcode) {
+        return res.status(400).json({  "message": "Please provide both email and code." });
+    }
+    const storedCode = verificationCodes[email];
+
+    if (!storedCode) {
+        return res.status(400).json({  "message": "The code is either not found or has already been used." });
+    }
+
+    // التحقق من انتهاء صلاحية الكود
+    if (Date.now() > storedCode.expiresAt) {
+        delete verificationCodes[email]; // حذف الكود بعد انتهاء صلاحيته
+        return res.status(400).json({  "message": "The code has expired." });
+    }  if (parseInt(resetcode) === storedCode.code) {
+        return res.status(200).json({  "message": "Verification successful!" });
+    } else {
+        return res.status(400).json({ "message": "The code is incorrect."});
+    }
+};
+const resetPassword = async (req, res) => {
+    const { email, newPassword } = req.body;
+
+    try {
+        // البحث عن المستخدم سواء كان في نموذج Worker أو LandOwner
+        let user = await Worker.findOne({ email });
+        if (!user) {
+            user = await LandOwner.findOne({ email });
+        }
+
+        // إذا لم يتم العثور على المستخدم في كلا النموذجين
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        
+        // التحقق من قوة كلمة المرور الجديدة
+        const passwordStrengthRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+        if (!passwordStrengthRegex.test(newPassword)) {
+            return res.status(400).json({
+                message: 'Password is weak. Please make sure it contains at least 8 characters, including upper/lowercase letters, a number, and a special character.'
+            });
+        }
+
+        // تحديث كلمة المرور
+        user.password = await bcrypt.hash(newPassword, 10);
+
+        // إزالة كود التحقق بعد التحديث
+        user.resetPasswordCode = null;
+        user.resetPasswordExpires = null;
+        await user.save();
+
+        // الاستجابة بنجاح
+        return res.status(200).json({ message: 'Password reset successfully.' });
+    } catch (error) {
+        console.error('Error in resetting password:', error);
+        return res.status(500).json({ message: 'Internal server error' });
+    }
+};
+const deactivationaccount=async (req,res)=>{
+    const email = req.params.email;
+    
+};
+
+module.exports = {verifyResetCode,resetPassword, login, deactivationaccount,
+    signupowner,signupWorker,profile,updateprofile,logout,sendconfirm,
+    getconfirm,myprofile,deleteAccount,updatePassword,forgotPassword};

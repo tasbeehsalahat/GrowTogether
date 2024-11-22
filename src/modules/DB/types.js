@@ -8,7 +8,8 @@ const ownerSchema = new mongoose.Schema({
 
     ownerName: { type: String, required: true },
     contactNumber: { type: String, required: true },
-    role: { type: String, default: 'Owner' }  // إضافة حقل role
+    role: { type: String, default: 'Owner' },  // إضافة حقل role
+    Status: { type: String, default: 'active' }, // إضافة حقل role
 
 }, { collection: 'Owner' });
 
@@ -42,6 +43,7 @@ const workerSchema = new mongoose.Schema({
     },
     contactNumber: { type: String, required: true },
     role: { type: String, default: 'Worker' }, // إضافة حقل role
+    Status: { type: String, default: 'active' }, // إضافة حقل role
 
 
 }, { collection: 'Worker' });
