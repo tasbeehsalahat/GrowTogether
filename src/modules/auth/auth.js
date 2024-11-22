@@ -13,12 +13,11 @@ const storage = multer.diskStorage({
 const admin = require('firebase-admin');
 const serviceAccount = require('../firebase/firebase.json');
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
-});
+const bodyParser = require('body-parser');
+
 const {authenticateJWT}=require('../middleware/middleware.js')
 const upload = multer({ storage: storage });
-const { signupowner,profile, login,signupWorker,updateprofile,logout} = require('../auth/auth.controller.js');
+const { signupowner,profile, login,signupWorker,updateprofile,logout,getconfirm,sendconfirm,myprofile} = require('../auth/auth.controller.js');
 const router = express.Router();
 const rateLimit = require('express-rate-limit');
 
@@ -33,37 +32,21 @@ const loginLimiter = rateLimit({
     standardHeaders: true, // إضافة معلومات إلى رؤوس الاستجابة
   legacyHeaders: false,
 });
+router.use(bodyParser.json());
+
+// Initialize Firebase Admin SDK
+admin.initializeApp({
+  credential: admin.credential.applicationDefault(),
+  databaseURL: "https://your-database-url.firebaseio.com" // Replace with your Firebase database URL
+});
 router.post('/login', loginLimiter,login); 
 router.post('/signupowner', signupowner);
 router.post('/signupworker', signupWorker);
-router.post('/send-verification-code', (req, res) => {
-    const phoneNumber = req.body.phoneNumber;
-    
-    admin.auth().generatePhoneNumberVerificationCode(phoneNumber)
-      .then((verificationCode) => {
-        // Send the verification code to the user (e.g., via SMS or email)
-        res.json({ success: true, message: "Verification code sent!" });
-      })
-      .catch((error) => {
-        console.error("Error sending verification code: ", error);
-        res.status(500).json({ success: false, message: "Failed to send verification code" });
-      });
-  });
-router.post('/verify-code', (req, res) => {
-    const { phoneNumber, verificationCode } = req.body;
-    
-    admin.auth().verifyPhoneNumber(verificationCode, phoneNumber)
-      .then((userCredential) => {
-        // OTP verified successfully
-        res.json({ success: true, message: "Phone number verified", user: userCredential });
-      })
-      .catch((error) => {
-        console.error("Error verifying OTP: ", error);
-        res.status(500).json({ success: false, message: "Failed to verify OTrP" });
-      });
-  });
+router.post('/send-confirmation-email',sendconfirm);
+router.post('/confirm-account',getconfirm)
   router.get('/profile',profile);
   router.patch('/update/:email',authenticateJWT,updateprofile);
   router.get('/logout',authenticateJWT,logout);
+  router.get('/myprofile',authenticateJWT,myprofile);
 
 module.exports = router; 

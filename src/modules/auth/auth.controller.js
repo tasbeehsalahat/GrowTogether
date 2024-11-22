@@ -5,8 +5,81 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken'); 
 const {signupSchema,workerSignupSchema,loginSchema,validateProfileUpdate} = require('../valdition/vald.js');
 const {Owner,Worker,Token} = require('../DB/types.js');  // تأكد من أن المسار صحيح
-const {validation}=require('../valdition/vald.js');
 const JWT_SECRET_KEY = '1234#';  // نفس المفتاح السري الذي ستستخدمه للتحقق من التوكن
+const bodyParser = require('body-parser');
+const nodemailer = require('nodemailer');
+const Sync = require('twilio/lib/rest/Sync.js');
+
+const generateRandomCode = () => {
+    return Math.floor(100000 + Math.random() * 900000); // توليد رقم عشوائي مكون من 6 أرقام
+};
+
+const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+        user: 'tasbeehsa80@gmail.com', // بريدك الإلكتروني
+        pass: 'yeaf tcnf prlj kzlj'  // كلمة المرور (يفضل استخدام كلمات مرور التطبيقات App Passwords)
+    }
+});
+
+let verificationCodes = {};
+const CODE_EXPIRATION_TIME = 5 * 60 * 1000; // 5 دقائق
+
+const sendconfirm= async (req, res) => {
+    const { email} = req.body;
+
+    const verificationCode = generateRandomCode() ;
+    // تخزين الكود مع تاريخ الانتهاء
+    const expirationTime = Date.now() + CODE_EXPIRATION_TIME;
+    verificationCodes[email] = { code: verificationCode, expiresAt: expirationTime };
+
+    const mailOptions = {
+        from: 'tasbeehsa@gmail.com', // المرسل
+        to: email,                   // المستلم
+        subject: 'VerificationCode',
+        text: `Your VerificationCode ${verificationCode}`
+
+       
+    };
+
+    try {
+        await transporter.sendMail(mailOptions);
+        res.status(200).json({   "message": "Verification code has been sent to the email."
+        });
+        
+        setTimeout(() => {
+            delete verificationCodes[email];
+        }, CODE_EXPIRATION_TIME);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({"message": "An error occurred while sending the email."});
+    }
+};
+
+const getconfirm = async (req, res) => {
+    const { email, code } = req.body;
+
+    if (!email || !code) {
+        return res.status(400).json({  "message": "Please provide both email and code." });
+    }
+    const storedCode = verificationCodes[email];
+
+    if (!storedCode) {
+        return res.status(400).json({  "message": "The code is either not found or has already been used." });
+    }
+
+    // التحقق من انتهاء صلاحية الكود
+    if (Date.now() > storedCode.expiresAt) {
+        delete verificationCodes[email]; // حذف الكود بعد انتهاء صلاحيته
+        return res.status(400).json({  "message": "The code has expired." });
+    }  if (parseInt(code) === storedCode.code) {
+        return res.status(200).json({  "message": "Verification successful!" });
+    } else {
+        return res.status(400).json({ "message": "The code is incorrect."});
+    }
+};
+
+
 const signupowner= async (req, res) => {
     const { error } = signupSchema.validate(req.body, { abortEarly: false });
     if (error) {
@@ -91,9 +164,9 @@ const signupWorker = async (req, res) => {
         return res.status(500).json({ message: 'Error adding worker' });
     }
 };
-
 const login = async (req, res) => {
     try {
+        // التحقق من صحة البيانات المدخلة
         const { error } = loginSchema.validate(req.body, { abortEarly: false });
         if (error) {
             const errorMessages = error.details.map(detail => detail.message);
@@ -102,6 +175,7 @@ const login = async (req, res) => {
 
         const { email, password } = req.body;
 
+        // محاولة العثور على المستخدم في جدول Owners
         let user = await Owner.findOne({ email });
 
         // إذا لم يتم العثور عليه في جدول Owners، تحقق في جدول Workers
@@ -112,33 +186,47 @@ const login = async (req, res) => {
         if (!user) {
             return res.status(404).json({ message: 'User not found' });
         }
+
+        // مقارنة كلمة المرور المدخلة مع كلمة المرور المخزنة
         const isMatch = await bcrypt.compare(password, user.password);
 
         if (!isMatch) {
             return res.status(400).json({ message: 'Invalid Email or Password' });
         }
-        const payload = { email: req.body.email }; // البيانات التي تريد تضمينها في التوكن
-const token = jwt.sign(payload, JWT_SECRET_KEY, { expiresIn: '1h' }); // انشئ التوكن هنا
 
- const existingToken = await Token.findOne({ email }); 
- if (existingToken) {
-     existingToken.token = token;  // Update the token if it already exists
-     await existingToken.save();
- } else {
-     const newToken = new Token({ email, token });
-     await newToken.save();
- }
-        const userName = user.userName || user.ownerName;  
-        const role = user instanceof Owner ? 'owner' : 'worker'; // تحديد الدور
+        // إنشاء payload مع الايميل
+        const payload = { email: req.body.email, role: user.role };
+        const token = jwt.sign(payload, JWT_SECRET_KEY, { expiresIn: '1h' });  // إنشاء التوكن
 
-        const welcomeMessage = role === 'worker' 
-    ? `Hello, ${userName}! Welcome to the Worker page.` : `Hello, ${userName}! Welcome to the Owner page.`;
+        // تحديد الدور بناءً على نوع المستخدم
+        const role = user instanceof Owner ? 'Owner' : 'Worker';
 
+        // التحقق إذا كان هناك توكن موجود لهذا الايميل في قاعدة البيانات
+        const existingToken = await Token.findOne({ email });
+        console.log("Authenticated user:", user.role);
+
+        if (existingToken) {
+            // تحديث التوكن إذا كان موجودًا
+            existingToken.token = token;
+            existingToken.role = role;  // التأكد من أن الدور يتم تحديثه في حال تغييره
+            await existingToken.save();
+        } else {
+            // إذا لم يكن هناك توكن موجود، نقوم بإنشاء توكن جديد
+            const newToken = new Token({ email, token, role });
+            await newToken.save();
+        }
+
+        // الحصول على اسم المستخدم بناءً على نوع المستخدم
+        const userName = user.userName || user.ownerName;
+
+        // تحديد رسالة الترحيب بناءً على الدور
+        const welcomeMessage = role === 'Worker' ? `Hello, ${userName}! Welcome to the Worker page.` : `Hello, ${userName}! Welcome to the Owner page.`;
+
+        // إرسال الاستجابة مع التوكن ورسالة الترحيب
         return res.status(200).json({
             message: 'Login successful',
             token,
             welcomeMessage,  // إضافة رسالة الترحيب
-           
         });
 
     } catch (error) {
@@ -183,35 +271,44 @@ const profile = async (req, res) => {
         return res.status(500).json({ message: 'Internal server error' });
     }
 };
-
 const updateprofile = async (req, res) => {
     try {
         if (!req.body || Object.keys(req.body).length === 0) {
             return res.status(400).json({ message: 'Please enter what you want to update' });
         }
 
-        const updates = req.body; // بيانات التحديث من البودي
-        let email = req.params.email; // الإيميل من الرابط
-        email = email.replace(":", ""); // إزالة أي نقاط في الإيميل إذا كانت موجودة في الرابط
+        const updates = req.body;  // The data you want to update from the request body
+        let email = req.params.email.trim();  // إزالة المسافات الزائدة
+        console.log("Authenticated aaemail:", req.user.email);
+
+        email = email.replace(":", "");  // Clean the email in case it contains a colon
+        console.log("Authenticated email:", req.user.email);
 
         if (req.user.email !== email) {
             return res.status(403).json({ message: 'You can only update your own profile.' });
         }
-        console.log(req.user.email);
+
+        // Check if the role is present in req.user
+        if (!req.user.role) {
+            return res.status(400).json({ message: 'User role is missing or invalid.' });
+        }
 
         const Model = req.user.role === 'Worker' ? Worker : Owner;
+        console.log('User Role:', req.user.role);
 
-        const validation = validateProfileUpdate(updates, Model); // استدعاء الدالة بشكل صحيح
+        // Validate the updates
+        const validation = validateProfileUpdate(updates, req.user.role);
         if (validation.error) {
             return res.status(400).json({ message: validation.error });
         }
 
         const updatedProfile = validation.value;
 
+        // Find and update the user profile in the database
         const updatedUser = await Model.findOneAndUpdate(
             { email },
             { $set: updatedProfile },
-            { new: true }
+            { new: true }  // Return the updated document
         );
 
         if (!updatedUser) {
@@ -228,7 +325,7 @@ const updateprofile = async (req, res) => {
 };
 const logout = async (req, res) => {
     try {
-        const token = req.header('Authorization');
+        const token = req.header('authorization');
         if (!token) {
             return res.status(401).json({ message: 'Unauthorized. No token provided.' });
         }
@@ -247,4 +344,67 @@ const logout = async (req, res) => {
         res.status(500).json({ error: 'An error occurred while logging out.' });
     }
 };
-module.exports = { login, signupowner,signupWorker,profile,updateprofile,logout};
+const myprofile = async (req, res) => {
+    try {
+        // الحصول على التوكن من الهيدر
+        const token = req.headers.authorization;
+
+        if (!token) {
+            return res.status(401).json({ message: 'Authorization token is required. Please login again.' });
+        }
+           // التحقق مما إذا كان التوكن موجودًا في جدول التوكن
+           const tokenExists = await Token.findOne({ token: token });
+           if (!tokenExists) {
+               return res.status(401).json({ message: 'You have logged out. Please login again.' });
+           }
+
+        let decodedToken;
+        try {
+            // التحقق من صحة التوكن
+            decodedToken = jwt.verify(token, JWT_SECRET_KEY);
+        } catch (err) {
+            // التحقق إذا كان الخطأ بسبب انتهاء صلاحية التوكن
+            if (err.name === 'TokenExpiredError') {
+                return res.status(401).json({ message: 'Token has expired. Please login again.' });
+            }
+            // التحقق إذا كان الخطأ بسبب توكن غير صالح
+            if (err.name === 'JsonWebTokenError') {
+                return res.status(401).json({ message: 'Invalid token. Please login again.' });
+            }
+            // أي أخطاء أخرى
+            return res.status(401).json({ message: 'Authentication failed. Please login again.' });
+        }
+
+        // استخراج الإيميل من التوكن
+        const email = decodedToken.email;
+
+        if (!email) {
+            return res.status(400).json({ message: 'Email not found in token' });
+        }
+
+        // البحث عن المستخدم في قاعدة البيانات
+        let user = await Worker.findOne({ email }) || await Owner.findOne({ email });
+
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        // إعداد بيانات البروفايل
+        const userProfile = {
+            email: user.email,
+            username: user.username || user.ownerName,
+            role: user instanceof Worker ? 'worker' : 'owner',
+            ...(user.skills && user.skills.length > 0 ? { skills: user.skills } : {}),
+            contactNumber: user.contactNumber || null,
+        };
+
+        return res.status(200).json({ profile: userProfile });
+
+    } catch (error) {
+        console.error('Error fetching user profile:', error);
+        return res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+
+module.exports = { login, signupowner,signupWorker,profile,updateprofile,logout,sendconfirm,getconfirm,myprofile};

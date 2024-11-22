@@ -26,7 +26,7 @@ const allowedSkills = [
     'Greenhouse Management'
 ];
 const workerSchema = new mongoose.Schema({
-    email: { type: String, required: true, unique: true },
+    email: { type: String, required: true, unique: true,lowercase:true },
     password: { type: String, required: true },
     userName: { type: String, required: true },
     skills: {
@@ -41,7 +41,7 @@ const workerSchema = new mongoose.Schema({
         }
     },
     contactNumber: { type: String, required: true },
-    role: { type: String, default: 'Worker' }  // إضافة حقل role
+    role: { type: String, default: 'Worker' }, // إضافة حقل role
 
 
 }, { collection: 'Worker' });
@@ -50,7 +50,9 @@ const workerSchema = new mongoose.Schema({
 const Worker = mongoose.model('Worker', workerSchema);
 const tokenSchema = new mongoose.Schema({
     email: { type: String, required: true, unique: true }, // The email address
-    token: { type: String, required: true ,unique: true }, // The generated token
+    token: { type: String, required: true ,unique: true },
+   role: { type: String, required: true  },
+
 }, { collection: 'Token' });
 const Token = mongoose.model('Token', tokenSchema);
 module.exports ={Owner,Worker,Token};
