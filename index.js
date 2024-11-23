@@ -5,6 +5,7 @@ const dotenv = require('dotenv');
 dotenv.config()
 const app = express();
 const PORT =  3000;
+const router = express.Router();
 
 
 const auth =require('./src/modules/auth/auth.js');
@@ -16,7 +17,7 @@ const cors = require('cors');
 
 app.use(cors());
 
-app.get('/test', (req, res) => {
+router.get('/test', (req, res) => {
   res.send('Server is working!');
 });
 
