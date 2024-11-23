@@ -47,8 +47,6 @@ const workerSchema = new mongoose.Schema({
 
 
 }, { collection: 'Worker' });
-
-
 const Worker = mongoose.model('Worker', workerSchema);
 const tokenSchema = new mongoose.Schema({
     email: { type: String, required: true, unique: true }, // The email address
@@ -57,4 +55,39 @@ const tokenSchema = new mongoose.Schema({
 
 }, { collection: 'Token' });
 const Token = mongoose.model('Token', tokenSchema);
-module.exports ={Owner,Worker,Token};
+
+const LandSchema = new mongoose.Schema({
+    ownerId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Owner',
+        required: true
+    },
+    area: {
+        type: Number, // مساحة الأرض بالمتر المربع
+        required: true
+    },
+    perimeter: {
+        type: Number, // محيط الأرض بالأمتار
+        required: true
+    },
+    coordinates: [
+        {
+            x: { type: Number, required: true },
+            y: { type: Number, required: true }
+        }
+    ],
+    soilType: {
+        type: String, // نوع التربة
+        enum: ['Loamy', 'Clay', 'Sandy', 'Silt'],
+        required: false
+    },
+    status: {
+        type: String,
+        enum: ['Available', 'Not Available'], // حالة الأرض
+        default: 'Available'
+    }
+}, {  collection: 'lands' });
+
+const Land = mongoose.model('Land', LandSchema);
+
+module.exports ={Owner,Worker,Token,Land};

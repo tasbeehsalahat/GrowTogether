@@ -17,7 +17,9 @@ const bodyParser = require('body-parser');
 
 const {authenticateJWT}=require('../middleware/middleware.js')
 const upload = multer({ storage: storage });
-const { signupowner,profile,deactivationaccount, login,signupWorker,updateprofile,logout,getconfirm,sendconfirm,verifyResetCode,resetPassword,myprofile,deleteAccount,forgotPassword, updatePassword} = require('../auth/auth.controller.js');
+const { signupowner,profile,deactivationaccount, login,signupWorker,
+  updateprofile,logout,getconfirm,sendconfirm,verifyResetCode,
+  resetPassword,myprofile,deleteAccount,forgotPassword, updatePassword} = require('../auth/auth.controller.js');
 const router = express.Router();
 const rateLimit = require('express-rate-limit');
 
@@ -43,7 +45,7 @@ router.post('/login', loginLimiter,login);
 router.post('/signupowner', signupowner);
 router.post('/signupworker', signupWorker);
 router.post('/send-confirmation-email',sendconfirm);
-router.post('/confirm-account',getconfirm)
+router.post('/confirm-account',getconfirm);
   router.get('/profile',profile);
   router.patch('/update/:email',authenticateJWT,updateprofile);
   router.get('/logout',authenticateJWT,logout);
@@ -53,6 +55,6 @@ router.post('/confirm-account',getconfirm)
   router.post('/forgot-password',forgotPassword);
   router.post('/verifyResetCode',verifyResetCode);
   router.post('/resetPassword',resetPassword);
-  router.post('/deactiveaccount/:email',deactivationaccount);
-
+  router.patch('/deactiveaccount',authenticateJWT,deactivationaccount);
+ 
 module.exports = router; 

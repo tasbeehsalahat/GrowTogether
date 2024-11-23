@@ -8,7 +8,6 @@ const {Owner,Worker,Token} = require('../DB/types.js');  // تأكد من أن �
 const JWT_SECRET_KEY = '1234#';  // نفس المفتاح السري الذي ستستخدمه للتحقق من التوكن
 const bodyParser = require('body-parser');
 const nodemailer = require('nodemailer');
-const Sync = require('twilio/lib/rest/Sync.js');
 
 const generateRandomCode = () => {
     return Math.floor(100000 + Math.random() * 900000); // توليد رقم عشوائي مكون من 6 أرقام
@@ -538,10 +537,61 @@ const resetPassword = async (req, res) => {
         return res.status(500).json({ message: 'Internal server error' });
     }
 };
-const deactivationaccount=async (req,res)=>{
-    const email = req.params.email;
-    
+const deactivationaccount = async (req, res) => {
+    const token = req.header('authorization'); // استخراج التوكن من الهيدر
+
+    if (!token) {
+        return res.status(401).json({ message: 'Authentication token is required.' });
+    }
+
+    try {
+        // فك تشفير التوكن
+        const decodedToken = jwt.verify(token, JWT_SECRET_KEY);
+        const { email, role } = decodedToken;
+
+        // تحقق من نوع الحساب (Owner أو Worker)
+        if (role === 'Owner') {
+            // تعطيل حساب المالك
+            const owner = await Owner.findOneAndUpdate(
+                { email },
+                { Status: 'inactive' },
+                { new: true } // لإرجاع المستند بعد التحديث
+            );
+
+            if (!owner) {
+                return res.status(404).json({ message: 'Owner not found.' });
+            }
+
+            return res.status(200).json({
+                message: 'Owner account has been deactivated successfully.',
+                owner: owner
+            });
+        } else if (role === 'Worker') {
+            // تعطيل حساب العامل
+            const worker = await Worker.findOneAndUpdate(
+                { email },
+                { Status: 'inactive' },
+                { new: true } // لإرجاع المستند بعد التحديث
+            );
+
+            if (!worker) {
+                return res.status(404).json({ message: 'Worker not found.' });
+            }
+
+            return res.status(200).json({
+                message: 'Worker account has been deactivated successfully.',
+                worker: worker
+            });
+        } else {
+            return res.status(403).json({ message: 'Invalid role.' });
+        }
+
+    } catch (error) {
+        console.error('Error deactivating account:', error);
+        return res.status(500).json({ message: 'Internal server error.' });
+    }
 };
+
 
 module.exports = {verifyResetCode,resetPassword, login, deactivationaccount,
     signupowner,signupWorker,profile,updateprofile,logout,sendconfirm,
