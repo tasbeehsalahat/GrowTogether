@@ -4,7 +4,7 @@ const connectDB = require('./src/modules/DB/connection.js'); // Import the conne
 const dotenv = require('dotenv');
 dotenv.config()
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT =  3000;
 
 
 const auth =require('./src/modules/auth/auth.js');
