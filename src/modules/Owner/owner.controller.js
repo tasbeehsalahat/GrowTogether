@@ -6,9 +6,6 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken'); 
 const {Owner,Worker,Token,Land} = require('../DB/types.js');  // تأكد من أن المسار صحيح
 const JWT_SECRET_KEY = '1234#';  // نفس المفتاح السري الذي ستستخدمه للتحقق من التوكن
-const bodyParser = require('body-parser');
-const nodemailer = require('nodemailer');
-const axios = require('axios');
 
 const addLand = async (req, res) => {
     const token = req.header('authorization'); //  "Bearer <token>"
