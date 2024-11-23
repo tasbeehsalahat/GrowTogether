@@ -228,5 +228,49 @@ const getLandbyid = async (req, res) => {
         return res.status(500).json({ message: 'Internal server error' });
     }
 };
+const updateOwnerProfile = async (req, res) => {
+    try {
+        if (!req.body || Object.keys(req.body).length === 0) {
+            return res.status(400).json({ message: 'Please enter what you want to update' });
+        }
 
-module.exports={addLand,getAllLands,updateLand,deleteLand,getLandbyid}
+        const updates = req.body; 
+        let email = req.params.email.trim();  // إزالة المسافات الزائدة
+        email = email.replace(":", "");  
+
+        if (req.user.email !== email || req.user.role !== 'Owner') {
+            return res.status(403).json({ message: 'You can only update your own profile as an Owner.' });
+        }
+
+        console.log('Updating profile for Owner:', email);
+
+        // Validate the updates for Owner
+        const validation = validateProfileUpdate(updates, 'Owner');
+        if (validation.error) {
+            return res.status(400).json({ message: validation.error });
+        }
+
+        const updatedProfile = validation.value;
+
+        // Find and update the Owner profile in the database
+        const updatedOwner = await Owner.findOneAndUpdate(
+            { email },
+            { $set: updatedProfile },
+            { new: true }  // Return the updated document
+        );
+
+        if (!updatedOwner) {
+            return res.status(404).json({ message: 'Owner not found.' });
+        }
+
+        return res.status(200).json({
+            message: 'Owner profile updated successfully.',
+            updatedOwner
+        });
+    } catch (error) {
+        console.error('Error updating Owner profile:', error);
+        return res.status(500).json({ message: 'Internal server error.' });
+    }
+};
+
+module.exports={addLand,getAllLands,updateLand,deleteLand,getLandbyid,updateOwnerProfile}

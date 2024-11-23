@@ -271,58 +271,7 @@ const profile = async (req, res) => {
         return res.status(500).json({ message: 'Internal server error' });
     }
 };
-const updateprofile = async (req, res) => {
-    try {
-        if (!req.body || Object.keys(req.body).length === 0) {
-            return res.status(400).json({ message: 'Please enter what you want to update' });
-        }
 
-        const updates = req.body;  // The data you want to update from the request body
-        let email = req.params.email.trim();  // إزالة المسافات الزائدة
-        console.log("Authenticated aaemail:", req.user.email);
-
-        email = email.replace(":", "");  // Clean the email in case it contains a colon
-        console.log("Authenticated email:", req.user.email);
-
-        if (req.user.email !== email) {
-            return res.status(403).json({ message: 'You can only update your own profile.' });
-        }
-
-        // Check if the role is present in req.user
-        if (!req.user.role) {
-            return res.status(400).json({ message: 'User role is missing or invalid.' });
-        }
-
-        const Model = req.user.role === 'Worker' ? Worker : Owner;
-        console.log('User Role:', req.user.role);
-
-        // Validate the updates
-        const validation = validateProfileUpdate(updates, req.user.role);
-        if (validation.error) {
-            return res.status(400).json({ message: validation.error });
-        }
-
-        const updatedProfile = validation.value;
-
-        // Find and update the user profile in the database
-        const updatedUser = await Model.findOneAndUpdate(
-            { email },
-            { $set: updatedProfile },
-            { new: true }  // Return the updated document
-        );
-
-        if (!updatedUser) {
-            return res.status(404).json({ message: 'User not found.' });
-        }
-
-        return res.status(200).json({
-            message: 'Profile updated successfully.',
-        });
-    } catch (error) {
-        console.error('Error updating profile:', error);
-        return res.status(500).json({ message: 'Internal server error.' });
-    }
-};
 const logout = async (req, res) => {
     try {
         const token = req.header('authorization');
@@ -594,5 +543,5 @@ const deactivationaccount = async (req, res) => {
 
 
 module.exports = {verifyResetCode,resetPassword, login, deactivationaccount,
-    signupowner,signupWorker,profile,updateprofile,logout,sendconfirm,
+    signupowner,signupWorker,profile,logout,sendconfirm,
     getconfirm,myprofile,deleteAccount,updatePassword,forgotPassword};
