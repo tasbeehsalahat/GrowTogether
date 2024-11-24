@@ -46,7 +46,7 @@ router.post('/signupowner', signupowner);
 router.post('/signupworker', signupWorker);
 router.post('/send-confirmation-email',sendconfirm);
 router.post('/confirm-account',getconfirm);
-  router.get('/profile',profile);
+ router.get('/profile',profile);
   router.get('/logout',authenticateJWT,logout);
   router.get('/myprofile',authenticateJWT,myprofile);
   router.delete('/delete-account/:email', authenticateJWT, deleteAccount);
