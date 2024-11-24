@@ -23,7 +23,7 @@ const { signupowner,profile,deactivationaccount, login,signupWorker,
 const router = express.Router();
 const rateLimit = require('express-rate-limit');
 const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, 
+  windowMs: 1* 60 * 1000, 
   max: 5,
   message: (req, res) => {
     return res.json({

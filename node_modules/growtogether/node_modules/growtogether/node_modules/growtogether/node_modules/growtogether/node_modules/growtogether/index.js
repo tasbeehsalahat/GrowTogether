@@ -15,14 +15,8 @@ app.use(express.static('public'));
 const cors = require('cors');
 app.use(cors());
 
-
  app.use('/auth', auth);
  app.use('/owner', owner);
-
-
-
-
-
 app.listen(2000, () => {
   console.log(`Server is running on porttttt ${PORT}`);
 });
