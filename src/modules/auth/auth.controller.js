@@ -208,12 +208,10 @@ const login = async (req, res) => {
             existingToken.role = role;  // التأكد من أن الدور يتم تحديثه في حال تغييره
             await existingToken.save();
         } else {
-            // إذا لم يكن هناك توكن موجود، نقوم بإنشاء توكن جديد
             const newToken = new Token({ email, token, role });
             await newToken.save();
         }
 
-        // الحصول على اسم المستخدم بناءً على نوع المستخدم
         const userName = user.userName || user.ownerName;
 
         // تحديد رسالة الترحيب بناءً على الدور
@@ -222,9 +220,9 @@ const login = async (req, res) => {
         // إرسال الاستجابة مع التوكن ورسالة الترحيب
         return res.status(200).json({
             message: 'Login successful',
-            token,
+            token, role,
             welcomeMessage,  // إضافة رسالة الترحيب
-            role
+           
         });
 
     } catch (error) {

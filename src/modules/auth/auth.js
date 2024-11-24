@@ -24,10 +24,10 @@ const router = express.Router();
 const rateLimit = require('express-rate-limit');
 const loginLimiter = rateLimit({
   windowMs: 1* 60 * 1000, 
-  max: 5,
+  max: 2,
   message: (req, res) => {
     return res.json({
-      message: 'Too many login attempts from this IP, please try again after 15 minutes'
+      message: 'Too many login attempts from this IP, please try again after 1 minutes'
     });
   },
     standardHeaders: true, // إضافة معلومات إلى رؤوس الاستجابة
