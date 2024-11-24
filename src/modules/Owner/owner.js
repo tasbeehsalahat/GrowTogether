@@ -11,4 +11,12 @@ router.patch('/updatemylands/:landid',authenticateJWT,updateLand);
 router.delete('/deletemylands/:landid',authenticateJWT,deleteLand);
 router.get('/getland/:landid',authenticateJWT,getLandbyid);
 router.patch('/update/:email',authenticateJWT,updateOwnerProfile);
+router.get('/test', (req, res) => {
+ 
+    console.log("mdjnc")
+  });
+  router.get('/open', (req, res) => {
+    return res.json("hii");
+   });
+
 module.exports = router;

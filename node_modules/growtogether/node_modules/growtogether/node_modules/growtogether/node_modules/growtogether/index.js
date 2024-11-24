@@ -3,26 +3,28 @@ const connectDB = require('./src/modules/DB/connection.js'); // Import the conne
 const dotenv = require('dotenv');
 dotenv.config();
 const app = express();
-const PORT = 3000;
+const PORT = 2000;
 const router = express.Router();
 //const p = require("./public/public.js")
 const auth = require('./src/modules/auth/auth.js');
-const owner = require('./src/modules/Owner/owner.js');
-
-// Connect to MongoDB
+const owner = require('./src/modules/Owner/owner.js')
 connectDB();
-
 app.use(express.json());
 
-// Serve static files from the "public" directory
-app.use(express.static('public'));
+// app.use(express.static('public'));
 const cors = require('cors');
 app.use(cors());
 
+// router.get('/open', (req, res) => {
+//  return res.json("hii");
+// });
+ app.use('/auth', auth);
+ app.use('/owner', owner);
+// API Endpoint
 
-app.use('/auth', auth);
-app.use('/owner', owner);
 
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+
+
+app.listen(2000, () => {
+  console.log(`Server is running on porttttt ${PORT}`);
 });
