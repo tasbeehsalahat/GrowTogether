@@ -5,7 +5,7 @@ dotenv.config();
 const app = express();
 const PORT = 3000;
 const router = express.Router();
-
+//const p = require("./public/public.js")
 const auth = require('./src/modules/auth/auth.js');
 const owner = require('./src/modules/Owner/owner.js');
 
@@ -13,6 +13,9 @@ const owner = require('./src/modules/Owner/owner.js');
 connectDB();
 
 app.use(express.json());
+
+// Serve static files from the "public" directory
+app.use(express.static('public'));
 const cors = require('cors');
 app.use(cors());
 

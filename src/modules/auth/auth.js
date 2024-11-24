@@ -22,7 +22,6 @@ const { signupowner,profile,deactivationaccount, login,signupWorker,
   resetPassword,myprofile,deleteAccount,forgotPassword, updatePassword} = require('../auth/auth.controller.js');
 const router = express.Router();
 const rateLimit = require('express-rate-limit');
-
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, 
   max: 5,
