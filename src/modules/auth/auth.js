@@ -40,7 +40,7 @@ admin.initializeApp({
   credential: admin.credential.applicationDefault(),
   databaseURL: "https://your-database-url.firebaseio.com" // Replace with your Firebase database URL
 });
-router.post('/login', loginLimiter,login); 
+router.post('/login', login); 
 router.post('/signupowner', signupowner);
 router.post('/signupworker', signupWorker);
 router.post('/send-confirmation-email',sendconfirm);
