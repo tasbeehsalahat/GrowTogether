@@ -174,11 +174,8 @@ const login = async (req, res) => {
         }
 
         const { email, password } = req.body;
-
-        // محاولة العثور على المستخدم في جدول Owners
         let user = await Owner.findOne({ email });
 
-        // إذا لم يتم العثور عليه في جدول Owners، تحقق في جدول Workers
         if (!user) {
             user = await Worker.findOne({ email });
         }
@@ -187,19 +184,17 @@ const login = async (req, res) => {
             return res.status(404).json({ message: 'User not found' });
         }
 
-        // مقارنة كلمة المرور المدخلة مع كلمة المرور المخزنة
         const isMatch = await bcrypt.compare(password, user.password);
 
         if (!isMatch) {
             return res.status(400).json({ message: 'Invalid Email or Password' });
         }
 
-        // إنشاء payload مع الايميل
         const payload = { email: req.body.email, role: user.role };
         const token = jwt.sign(payload, JWT_SECRET_KEY, { expiresIn: '1h' });  // إنشاء التوكن
 
         const role = user instanceof Owner ? 'Owner' : 'Worker';
-
+        console.log("User role:", role);
         const existingToken = await Token.findOne({ email });
         console.log("Authenticated user:", role);
 
@@ -213,15 +208,13 @@ const login = async (req, res) => {
         }
 
         const userName = user.userName || user.ownerName;
-
-        // تحديد رسالة الترحيب بناءً على الدور
         const welcomeMessage = role === 'Worker' ? `Hello, ${userName}! Welcome to the Worker page.` : `Hello, ${userName}! Welcome to the Owner page.`;
 
-        // إرسال الاستجابة مع التوكن ورسالة الترحيب
         return res.status(200).json({
             message: 'Login successful',
-            token, role,
-            welcomeMessage,  // إضافة رسالة الترحيب
+            token, 
+            role,
+            welcomeMessage // لة 
            
         });
 
