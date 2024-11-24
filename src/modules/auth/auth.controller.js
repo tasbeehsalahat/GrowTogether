@@ -230,8 +230,13 @@ const login = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Login error:", error);
-        return res.status(500).json({ message: 'Error logging in' });
+        console.error("errorrrrr", error);
+
+        if (error.code === 11000) {
+            return res.status(409).json({ message: 'sorry,this email is already exist' });
+        }
+
+        return res.status(500).json({ message: 'Error adding worker' });
     }
 };
 
