@@ -11,16 +11,14 @@ const owner = require('./src/modules/Owner/owner.js')
 connectDB();
 app.use(express.json());
 
-// app.use(express.static('public'));
+app.use(express.static('public'));
 const cors = require('cors');
 app.use(cors());
 
-// router.get('/open', (req, res) => {
-//  return res.json("hii");
-// });
+
  app.use('/auth', auth);
  app.use('/owner', owner);
-// API Endpoint
+
 
 
 
