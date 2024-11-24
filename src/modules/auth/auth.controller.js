@@ -211,7 +211,7 @@ const login = async (req, res) => {
         const welcomeMessage = role === 'Worker' ? `Hello, ${userName}! Welcome to the Worker page.` : `Hello, ${userName}! Welcome to the Owner page.`;
 
         return res.status(200).json({
-            message: 'Login successful',
+            message: 'Login successful!',
             token, 
             role,
             welcomeMessage // لة 
