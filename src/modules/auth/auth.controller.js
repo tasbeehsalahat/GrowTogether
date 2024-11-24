@@ -203,7 +203,7 @@ const login = async (req, res) => {
 
         // التحقق إذا كان هناك توكن موجود لهذا الايميل في قاعدة البيانات
         const existingToken = await Token.findOne({ email });
-        console.log("Authenticated user:", user.role);
+        console.log("Authenticated user:", role);
 
         if (existingToken) {
             // تحديث التوكن إذا كان موجودًا
