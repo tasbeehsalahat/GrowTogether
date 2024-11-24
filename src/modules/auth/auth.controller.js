@@ -198,15 +198,12 @@ const login = async (req, res) => {
         const payload = { email: req.body.email, role: user.role };
         const token = jwt.sign(payload, JWT_SECRET_KEY, { expiresIn: '1h' });  // إنشاء التوكن
 
-        // تحديد الدور بناءً على نوع المستخدم
         const role = user instanceof Owner ? 'Owner' : 'Worker';
 
-        // التحقق إذا كان هناك توكن موجود لهذا الايميل في قاعدة البيانات
         const existingToken = await Token.findOne({ email });
         console.log("Authenticated user:", role);
 
         if (existingToken) {
-            // تحديث التوكن إذا كان موجودًا
             existingToken.token = token;
             existingToken.role = role;  // التأكد من أن الدور يتم تحديثه في حال تغييره
             await existingToken.save();
@@ -227,6 +224,7 @@ const login = async (req, res) => {
             message: 'Login successful',
             token,
             welcomeMessage,  // إضافة رسالة الترحيب
+            role
         });
 
     } catch (error) {
