@@ -73,6 +73,8 @@ const LandSchema = new mongoose.Schema({
     soilType: { type: String, required: true },
     status: { type: String, default: "Available" },
     formattedAddress: { type: String, required: true },
+    TypeofWork: { type: String, required: true },
+
 }, { collection: 'lands' });
 
 const Land= mongoose.model('Land', LandSchema);

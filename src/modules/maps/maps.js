@@ -36,9 +36,9 @@ router.post("/add-land", async (req, res) => {
                 return res.status(404).json({ message: "Owner not found." });
             }
     
-        const {  area, status, streetName, city, soilType, town ,specificArea} = req.body;
+        const {  area, status, streetName, city, soilType, town ,specificArea,TypeofWork} = req.body;
 
-        if (!streetName || !city   || !area  || !soilType) {
+        if (!streetName || !city   || !area  || !soilType  || !TypeofWork) {
             return res.status(400).json({
                 message: "All fields are required: street, city, state, area, perimeter, soilType.",
             });
@@ -67,6 +67,7 @@ const newLand = new Land({
     soilType,
     status: status || "Available", // Default to "Available" if status is not provided
     formattedAddress,
+    TypeofWork
 });
 await newLand.save();
 

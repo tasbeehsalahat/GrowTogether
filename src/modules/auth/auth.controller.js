@@ -192,8 +192,7 @@ const login = async (req, res) => {
 
         const payload = { email: req.body.email, role: user.role };
         const token = jwt.sign(payload, JWT_SECRET_KEY, { expiresIn: '5h' });  // إنشاء التوكن
-        localStorage.setItem("authToken", token);
-
+    
         const role = user instanceof Owner ? 'Owner' : 'Worker';
         console.log("User role:", role);
         const existingToken = await Token.findOne({ email });
@@ -226,7 +225,7 @@ const login = async (req, res) => {
             return res.status(409).json({ message: 'sorry,this email is already exist' });
         }
 
-        return res.status(500).json({ message: 'Error adding worker' });
+        return res.status(500).json({ message: 'Error logging in ' });
     }
 };
 
