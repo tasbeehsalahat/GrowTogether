@@ -191,7 +191,8 @@ const login = async (req, res) => {
         }
 
         const payload = { email: req.body.email, role: user.role };
-        const token = jwt.sign(payload, JWT_SECRET_KEY, { expiresIn: '1h' });  // إنشاء التوكن
+        const token = jwt.sign(payload, JWT_SECRET_KEY, { expiresIn: '5h' });  // إنشاء التوكن
+        localStorage.setItem("authToken", token);
 
         const role = user instanceof Owner ? 'Owner' : 'Worker';
         console.log("User role:", role);

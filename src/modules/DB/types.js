@@ -60,75 +60,71 @@ const tokenSchema = new mongoose.Schema({
 const Token = mongoose.model('Token', tokenSchema);
 
 const LandSchema = new mongoose.Schema({
-    ownerId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Owner',
-        required: true
-    },
-    area: {
-        type: Number, // مساحة الأرض بالمتر المربع
-        required: true
-    },
-    perimeter: {
-        type: Number, // محيط الأرض بالأمتار
-        required: true
-    },
+    ownerId: { type: mongoose.Schema.Types.ObjectId, ref: "Owner", required: true },
+    ownerEmail: { type: String, required: true }, // Store the owner's email
+    area: { type: Number, required: true },
+    specificArea: { type: Number, required:false},
     coordinates: [
         {
-            x: { type: Number, required: true }, // إحداثيات X (خط العرض)
-            y: { type: Number, required: true }  // إحداثيات Y (خط الطول)
-        }
+            x: { type: Number, required: true },
+            y: { type: Number, required: true },
+        },
     ],
-    soilType: {
-        type: String, // نوع التربة
-        enum: ['Loamy', 'Clay', 'Sandy', 'Silt'],
-        required: true
-    },
-    status: {
-        type: String,
-        enum: ['Available', 'Not Available'], // حالة الأرض
-        default: 'Available'
-    },
-    formattedAddress: {
-        type: String, // العنوان الكامل
-        required: true
-    }
+    soilType: { type: String, required: true },
+    status: { type: String, default: "Available" },
+    formattedAddress: { type: String, required: true },
 }, { collection: 'lands' });
 
 const Land= mongoose.model('Land', LandSchema);
 
 const Work = new mongoose.Schema({
-    location: {
-        type: String,
-        required: true
-      },
-      skills: {
-        type: [String], // مهارات العامل
-        required: true
+    skills: {
+        type: [String], // قائمة بالمهارات
+        required: true,
       },
       tools: {
-        type: [String], // أدوات العامل
-        required: true
+        type: [String], // قائمة بالأدوات
+        required: true,
       },
       availableDays: {
         type: [String], // الأيام المتاحة
-        required: true
+        required: true,
       },
-      workDetails: {
-        type:[String],  // تفاصيل العمل
-        required: true
+      hourlyRate: {
+        type: Number, // الأجرة بالساعة
+        required: true,
+      },
+      areas: {
+        type: [String], // المناطق التي يمكن للعامل العمل بها
+        required: true,
+      },
+      location: {
+        type: {
+          latitude: { type: Number, required: true }, // دائرة العرض
+          longitude: { type: Number, required: true }, // خط الطول
+        },
+        required: true,
       },
       coordinates: {
-        lat: { type: Number },
-        lng: { type: Number }
+        type: {
+          lat: { type: Number, required: true },
+          lng: { type: Number, required: true },
+        },
+        required: true,
+      },
+      email: {
+        type: String, // الإيميل الخاص بالعامل
+        required: true,
+      },
+      phone: {
+        type: String, // رقم الهاتف الخاص بالعامل
+        required: true,
       },
       createdAt: {
         type: Date,
-        default: Date.now
-      }
+        default: Date.now,
+      },
     });
-    
-  
   const works = mongoose.model('Works', Work);
 
 module.exports ={Owner,Worker,Token,Land,works};
