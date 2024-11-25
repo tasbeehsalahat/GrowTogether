@@ -1,4 +1,3 @@
-// models/Admin.js
 const mongoose = require('mongoose');
 
 const ownerSchema = new mongoose.Schema({
@@ -14,6 +13,7 @@ const ownerSchema = new mongoose.Schema({
 }, { collection: 'Owner' });
 
 const Owner = mongoose.model('Owner', ownerSchema);
+
 const allowedSkills = [
     'Plowing',
     'Irrigation',
@@ -47,13 +47,16 @@ const workerSchema = new mongoose.Schema({
 
 
 }, { collection: 'Worker' });
+
 const Worker = mongoose.model('Worker', workerSchema);
+
 const tokenSchema = new mongoose.Schema({
     email: { type: String, required: true, unique: true }, // The email address
     token: { type: String, required: true ,unique: true },
    role: { type: String, required: true  },
 
 }, { collection: 'Token' });
+
 const Token = mongoose.model('Token', tokenSchema);
 
 const LandSchema = new mongoose.Schema({
@@ -94,4 +97,38 @@ const LandSchema = new mongoose.Schema({
 
 const Land= mongoose.model('Land', LandSchema);
 
-module.exports ={Owner,Worker,Token,Land};
+const Work = new mongoose.Schema({
+    location: {
+        type: String,
+        required: true
+      },
+      skills: {
+        type: [String], // مهارات العامل
+        required: true
+      },
+      tools: {
+        type: [String], // أدوات العامل
+        required: true
+      },
+      availableDays: {
+        type: [String], // الأيام المتاحة
+        required: true
+      },
+      workDetails: {
+        type:[String],  // تفاصيل العمل
+        required: true
+      },
+      coordinates: {
+        lat: { type: Number },
+        lng: { type: Number }
+      },
+      createdAt: {
+        type: Date,
+        default: Date.now
+      }
+    });
+    
+  
+  const works = mongoose.model('Works', Work);
+
+module.exports ={Owner,Worker,Token,Land,works};
