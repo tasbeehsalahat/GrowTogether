@@ -72,22 +72,26 @@ const LandSchema = new mongoose.Schema({
     },
     coordinates: [
         {
-            x: { type: Number, required: true },
-            y: { type: Number, required: true }
+            x: { type: Number, required: true }, // إحداثيات X (خط العرض)
+            y: { type: Number, required: true }  // إحداثيات Y (خط الطول)
         }
     ],
     soilType: {
         type: String, // نوع التربة
         enum: ['Loamy', 'Clay', 'Sandy', 'Silt'],
-        required: false
+        required: true
     },
     status: {
         type: String,
         enum: ['Available', 'Not Available'], // حالة الأرض
         default: 'Available'
+    },
+    formattedAddress: {
+        type: String, // العنوان الكامل
+        required: true
     }
-}, {  collection: 'lands' });
+}, { collection: 'lands' });
 
-const Land = mongoose.model('Land', LandSchema);
+const Land= mongoose.model('Land', LandSchema);
 
 module.exports ={Owner,Worker,Token,Land};
