@@ -5,8 +5,9 @@ const {Owner,Worker,Token,Land,works} = require('../DB/types.js');  // تأكد 
 
 const router = express.Router();
 
-router.post("/get-location", async (req, res) => {
+router.post("/add-land", async (req, res) => {
     try {
+        
         const { ownerId, area, perimeter, street, city, state, country, soilType, status } = req.body;
 
         // التأكد من إدخال كل الحقول المطلوبة
