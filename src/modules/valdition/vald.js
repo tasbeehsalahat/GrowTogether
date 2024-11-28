@@ -157,7 +157,83 @@ const validateProfileUpdate = (userData, role) => {
 
     return { value };
 };
+const land = (data) => {
+    const schema = Joi.object({
+        landName: Joi.string()
+            .min(3)
+            .max(100)
+            .optional()
+            .messages({
+                'string.base': 'Land name must be a string.',
+                'string.min': 'Land name must be at least 3 characters long.',
+                'string.max': 'Land name cannot exceed 100 characters.',
+            }),
+        workType: Joi.string()
+            .valid('Agricultural', 'Commercial', 'Residential', 'Guarantee')
+            .required()
+            .messages({
+                'any.only': 'Work type must be one of Agricultural, Commercial, Guarantee, or Residential.',
+                'any.required': 'Work type is required.',
+            }),
+        description: Joi.string()
+            .max(500)
+            .optional()
+            .messages({
+                'string.base': 'Description must be a string.',
+                'string.max': 'Description cannot exceed 500 characters.',
+            }),
+        village: Joi.string()
+            .optional()
+            .messages({
+                'string.base': 'Village must be a string.',
+            }),
+        area: Joi.number()
+            .positive()
+            .required()
+            .messages({
+                'number.base': 'Area must be a number.',
+                'number.positive': 'Area must be a positive number.',
+                'any.required': 'Area is required.',
+            }), 
+             SpecificArea: Joi.number()
+            .positive()
+            .required()
+            .messages({
+                'number.base': 'Area must be a number.',
+                'number.positive': 'Area must be a positive number.',
+                'any.required': 'Area is required.',
+            }),
+        coordinates: Joi.object({
+            lat: Joi.number()
+                .required()
+                .messages({
+                    'number.base': 'Latitude must be a number.',
+                    'any.required': 'Latitude is required.',
+                }),
+            lng: Joi.number()
+                .required()
+                .messages({
+                    'number.base': 'Longitude must be a number.',
+                    'any.required': 'Longitude is required.',
+                }),
+        }).optional(),
+        images: Joi.array()
+            .items(Joi.string().uri())
+            .optional()
+            .messages({
+                'array.base': 'Images must be an array of URLs.',
+                'string.uri': 'Each image must be a valid URL.',
+            }),
+    });
+
+    return schema.validate(data, { abortEarly: false });
+};
+
+const mongoose = require('mongoose');
+const bcrypt = require('bcrypt');
+const Schema = mongoose.Schema;
+
+// تعريف الـ Schema لحساب الشركة
 
 
-
-module.exports = {signupSchema,workerSignupSchema,loginSchema,validateProfileUpdate};
+module.exports = {signupSchema,workerSignupSchema,loginSchema,validateProfileUpdate,land};

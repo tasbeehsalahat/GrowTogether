@@ -10,9 +10,11 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@tensorflow/tfjs": "^4.22.0",
     "bcrypt": "^5.1.1",
     "bcryptjs": "^2.4.3",
     "body-parser": "^1.20.3",
+    "compromise": "^14.14.2",
     "cors": "^2.8.5",
     "crypto": "^1.0.1",
     "dns": "^0.1.2",
@@ -27,10 +29,12 @@
     "mailgun-js": "^0.22.0",
     "mongoose": "^8.8.2",
     "multer": "^1.4.5-lts.1",
+    "natural": "^8.0.1",
+    "node-nlp": "^4.27.0",
     "nodemailer": "^6.9.16",
     "twilio": "^5.3.6"
   },
-  "description": "",
+  "description": "graduation project",
   "devDependencies": {
     "nodemon": "^3.1.7"
   }

@@ -19,7 +19,8 @@ const {authenticateJWT}=require('../middleware/middleware.js')
 const upload = multer({ storage: storage });
 const { signupowner,profile,deactivationaccount, login,signupWorker,
   updateprofile,logout,getconfirm,sendconfirm,verifyResetCode,
-  resetPassword,myprofile,deleteAccount,forgotPassword, updatePassword} = require('../auth/auth.controller.js');
+  resetPassword,myprofile,deleteAccount,forgotPassword, updatePassword,
+  logincompany} = require('../auth/auth.controller.js');
 const router = express.Router();
 const rateLimit = require('express-rate-limit');
 const loginLimiter = rateLimit({
@@ -40,7 +41,7 @@ admin.initializeApp({
   credential: admin.credential.applicationDefault(),
   databaseURL: "https://your-database-url.firebaseio.com" // Replace with your Firebase database URL
 });
-router.post('/login',login); 
+router.post('/login',loginLimiter,login); 
 router.post('/signupowner', signupowner);
 router.post('/signupworker', signupWorker);
 router.post('/send-confirmation-email',sendconfirm);
@@ -54,5 +55,6 @@ router.post('/confirm-account',getconfirm);
   router.post('/verifyResetCode',verifyResetCode);
   router.post('/resetPassword',resetPassword);
   router.patch('/deactiveaccount',authenticateJWT,deactivationaccount);
- 
+  router.post('/logincompany',logincompany);
+
 module.exports = router; 

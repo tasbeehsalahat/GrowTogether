@@ -8,6 +8,7 @@ const {Owner,Worker,Token} = require('../DB/types.js');  // تأكد من أن �
 const JWT_SECRET_KEY = '1234#';  // نفس المفتاح السري الذي ستستخدمه للتحقق من التوكن
 const bodyParser = require('body-parser');
 const nodemailer = require('nodemailer');
+const { Company } = require('../DB/types.js');
 
 const generateRandomCode = () => {
     return Math.floor(100000 + Math.random() * 900000); // توليد رقم عشوائي مكون من 6 أرقام
@@ -121,6 +122,32 @@ const signupowner= async (req, res) => {
         return res.status(500).json({ message: 'Error adding owner' });
     }
 };
+const allowedSkills = [
+    'خبرة في الحراثة', 
+    'خبرة بالآلات الزراعية', 
+    'مزارع', 
+    'خبرة في الزراعة', 
+    'خبرة في زراعة المحاصيل', 
+    'تقني ري', 
+    'خبرة في أنظمة الري', 
+    'عامل حصاد', 
+    'خبرة في جمع المحاصيل', 
+    'خبرة في الزراعة', 
+    'خبرة في التسميد', 
+    'تقني تسميد', 
+    'خبير مكافحة آفات', 
+    'خبرة في مكافحة الحشرات', 
+    'خبرة في استخدام المبيدات', 
+    'خبرة في تسوية الأرض', 
+    'متخصص في تجهيز الأراضي', 
+    'عامل إزالة الأعشاب', 
+    'خبرة في المكافحة', 
+    'خبرة في المعدات الزراعية', 
+    'تقني محميات زراعية', 
+    'خبرة في البيوت البلاستيكية', 
+    'عامل نقل', 
+    'خبرة في شحن المحاصيل'
+];
 
 const signupWorker = async (req, res) => {
     const { error } = workerSignupSchema.validate(req.body, { abortEarly: false });
@@ -134,7 +161,10 @@ const signupWorker = async (req, res) => {
     if (password !== confirmPassword) {
         return res.status(400).json({ message: 'Password and confirm password do not match' });
     }
-
+  // تحقق من أن المهارات المدخلة صحيحة
+  if (!skills.every(skill => allowedSkills.includes(skill))) {
+    return res.status(400).json({ message: 'اختر مهارات لها علاقة بأعمال الأرض' });
+}
     try {
         // Hash the password
         const hashedPassword = await bcrypt.hash(password, 10);
@@ -166,7 +196,6 @@ const signupWorker = async (req, res) => {
 };
 const login = async (req, res) => {
     try {
-        // التحقق من صحة البيانات المدخلة
         const { error } = loginSchema.validate(req.body, { abortEarly: false });
         if (error) {
             const errorMessages = error.details.map(detail => detail.message);
@@ -189,44 +218,84 @@ const login = async (req, res) => {
         if (!isMatch) {
             return res.status(400).json({ message: 'Invalid Email or Password' });
         }
-
-        const payload = { email: req.body.email, role: user.role };
-        const token = jwt.sign(payload, JWT_SECRET_KEY, { expiresIn: '5h' });  // إنشاء التوكن
-    
         const role = user instanceof Owner ? 'Owner' : 'Worker';
-        console.log("User role:", role);
-        const existingToken = await Token.findOne({ email });
-        console.log("Authenticated user:", role);
 
-        if (existingToken) {
-            existingToken.token = token;
-            existingToken.role = role;  // التأكد من أن الدور يتم تحديثه في حال تغييره
-            await existingToken.save();
-        } else {
-            const newToken = new Token({ email, token, role });
-            await newToken.save();
+        const payload = role === 'Owner' 
+        ? {
+            email: req.body.email,
+            role: user.role,
+            ownerName: user.ownerName,
+            contactNumber: user.contactNumber,
+            Status: user.Status,
         }
+        : {
+            email: req.body.email,
+            role: user.role,
+            userName: user.userName,
+            contactNumber: user.contactNumber,
+            Status: user.Status,
+            skills: user.skills
+        };
+    
+    const token = jwt.sign(payload, JWT_SECRET_KEY, { expiresIn: '10d' });  // إنشاء التوكن مع البيانات الإضافية
+    console.log(payload); // تأكد من أن القيمة موجودة هنا
+
+    console.log(user.contactNumber); // تأكد من أن القيمة موجودة هنا
+    if (!user.contactNumber) {
+        return res.status(400).json({ message: "رقم الاتصال مطلوب." });
+    }
+    
+         // جلب البيانات الإضافية بناءً على الدور
+         const userData =
+         role === 'Owner'
+             ? {
+                 ownerName: user.ownerName,
+                 contactNumber: user.contactNumber,
+                 role: user.role,
+                 Status: user.Status
+             }
+             : {
+                 userName: user.userName,
+                 contactNumber: user.contactNumber,
+                 role: user.role,
+                 Status: user.Status,
+                 skills: user.skills
+             };
+        console.log("User role:", role);
+      // تحديث أو إنشاء التوكن في جدول التوكن
+      const existingToken = await Token.findOne({ email });
+
+      if (existingToken) {
+          existingToken.token = token;
+          Object.assign(existingToken, userData); // تحديث البيانات الإضافية
+          await existingToken.save();
+      } else {
+          const newToken = new Token({ email, token, ...userData }); // إضافة البيانات الإضافية
+          await newToken.save();
+      }
+      console.log("Authenticated user:", role);
+
 
         const userName = user.userName || user.ownerName;
         const welcomeMessage = role === 'Worker' ? `Hello, ${userName}! Welcome to the Worker page.` : `Hello, ${userName}! Welcome to the Owner page.`;
 
-        return res.status(200).json({
-            message: 'Login successful!',
-            token, 
-            role,
-            welcomeMessage // لة 
-           
-        });
+    // إرسال الاستجابة
+    return res.status(200).json({
+        message: 'Login successful!',
+        token,
+        role,
+        welcomeMessage,
+        userData // إرسال بيانات المستخدم
+    });
+} catch (error) {
+    console.error("Error during login:", error);
 
-    } catch (error) {
-        console.error("errorrrrr", error);
-
-        if (error.code === 11000) {
-            return res.status(409).json({ message: 'sorry,this email is already exist' });
-        }
-
-        return res.status(500).json({ message: 'Error logging in ' });
+    if (error.code === 11000) {
+        return res.status(409).json({ message: 'Sorry, this email is already exist' });
     }
+
+    return res.status(500).json({ message: 'Error logging in' });
+}
 };
 
 
@@ -534,8 +603,69 @@ const deactivationaccount = async (req, res) => {
         return res.status(500).json({ message: 'Internal server error.' });
     }
 };
+const logincompany = async (req, res) => {
+    try {
+        const { email, password } = req.body;
 
+        // التحقق من الحقول المدخلة
+        if (!email || !password) {
+            return res.status(400).json({ message: "يرجى إدخال البريد الإلكتروني وكلمة المرور" });
+        }
+
+        // البحث عن الشركة بناءً على البريد الإلكتروني
+        const company = await Company.findOne({ email });
+        console.log("Email entered:", email);
+        console.log("Company found:", company);
+
+        if (!company) {
+            return res.status(404).json({ message: "الشركة غير موجودة" });
+        }
+
+        // مقارنة كلمة المرور
+        if (password !== company.password) {
+            return res.status(401).json({ message: "كلمة المرور غير صحيحة" });
+        }
+
+        // إعداد البيانات للتوكن
+        const payload = {
+            email: company.email,
+            role: company.role,
+        };
+
+        const token = jwt.sign(payload, JWT_SECRET_KEY, { expiresIn: '20d' });
+
+        // إنشاء أو تحديث التوكن
+        const existingToken = await Token.findOne({ email });
+        if (existingToken) {
+            existingToken.token = token;
+            existingToken.role = company.role || existingToken.role; // تحديث الدور إذا لم يكن مفقودًا
+            await existingToken.save();
+        } else {
+            const newToken = new Token({
+                email: company.email,
+                token,
+                role: company.role,
+                ...(company.role === 'Owner' && { ownerName: company.ownerName, contactNumber: company.contactNumber }),
+                ...(company.role === 'Worker' && { userName: company.userName, skills: company.skills }),
+            });
+            await newToken.save();
+        }
+
+        console.log("Authenticated company:", company.role);
+
+        // إرسال التوكن مع الرد
+        res.status(200).json({
+            message: "تم تسجيل الدخول بنجاح",
+            token,
+            role: company.role,
+        });
+
+    } catch (error) {
+        console.error("خطأ في تسجيل الدخول: ", error);
+        res.status(500).json({ message: "حدث خطأ أثناء تسجيل الدخول" });
+    }
+};
 
 module.exports = {verifyResetCode,resetPassword, login, deactivationaccount,
     signupowner,signupWorker,profile,logout,sendconfirm,
-    getconfirm,myprofile,deleteAccount,updatePassword,forgotPassword};
+    getconfirm,myprofile,deleteAccount,updatePassword,forgotPassword,logincompany};

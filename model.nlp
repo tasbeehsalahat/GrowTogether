@@ -1,0 +1,243 @@
+{
+  "settings": {
+    "languages": [
+      "en"
+    ],
+    "tag": "nlp",
+    "threshold": 0.5,
+    "autoLoad": true,
+    "autoSave": true,
+    "modelFileName": "model.nlp",
+    "executeActionsBeforeAnswers": false,
+    "calculateSentiment": true
+  },
+  "nluManager": {
+    "settings": {
+      "tag": "nlu-manager"
+    },
+    "locales": [
+      "en"
+    ],
+    "languageNames": {},
+    "domainManagers": {
+      "en": {
+        "settings": {
+          "locale": "en",
+          "trainByDomain": false,
+          "tag": "domain-manager-en",
+          "nluByDomain": {
+            "default": {
+              "className": "NeuralNlu",
+              "settings": {}
+            }
+          },
+          "useStemDict": true
+        },
+        "stemDict": {
+          "plow": {
+            "intent": "Tools",
+            "domain": "default"
+          },
+          "plant": {
+            "intent": "Skills",
+            "domain": "default"
+          },
+          "harvest": {
+            "intent": "Skills",
+            "domain": "default"
+          },
+          "tractor": {
+            "intent": "Tools",
+            "domain": "default"
+          },
+          "harrow": {
+            "intent": "Tools",
+            "domain": "default"
+          }
+        },
+        "intentDict": {
+          "Skills": "default",
+          "Tools": "default"
+        },
+        "sentences": [
+          {
+            "domain": "default",
+            "utterance": "plowing",
+            "intent": "Skills"
+          },
+          {
+            "domain": "default",
+            "utterance": "planting",
+            "intent": "Skills"
+          },
+          {
+            "domain": "default",
+            "utterance": "harvesting",
+            "intent": "Skills"
+          },
+          {
+            "domain": "default",
+            "utterance": "tractor",
+            "intent": "Tools"
+          },
+          {
+            "domain": "default",
+            "utterance": "plow",
+            "intent": "Tools"
+          },
+          {
+            "domain": "default",
+            "utterance": "harrow",
+            "intent": "Tools"
+          }
+        ],
+        "domains": {
+          "master_domain": {
+            "settings": {
+              "locale": "en",
+              "tag": "nlu-en",
+              "keepStopwords": true,
+              "nonefeatureValue": 1,
+              "nonedeltaMultiplier": 1.2,
+              "spellCheck": false,
+              "spellCheckDistance": 1,
+              "filterZeros": true,
+              "log": true
+            },
+            "features": {
+              "plow": 1,
+              "plant": 1,
+              "harvest": 1,
+              "tractor": 1,
+              "harrow": 1
+            },
+            "intents": {
+              "Skills": 1,
+              "Tools": 1
+            },
+            "intentFeatures": {
+              "Skills": {
+                "plow": 1,
+                "plant": 1,
+                "harvest": 1
+              },
+              "Tools": {
+                "tractor": 1,
+                "plow": 1,
+                "harrow": 1
+              }
+            },
+            "featuresToIntent": {
+              "plow": [
+                "Skills",
+                "Tools"
+              ],
+              "plant": [
+                "Skills"
+              ],
+              "harvest": [
+                "Skills"
+              ],
+              "tractor": [
+                "Tools"
+              ],
+              "harrow": [
+                "Tools"
+              ]
+            },
+            "neuralNetwork": {
+              "settings": {
+                "locale": "en",
+                "tag": "nlu-en",
+                "keepStopwords": true,
+                "nonefeatureValue": 1,
+                "nonedeltaMultiplier": 1.2,
+                "spellCheck": false,
+                "spellCheckDistance": 1,
+                "filterZeros": true,
+                "log": true
+              },
+              "features": [
+                "plow",
+                "plant",
+                "harvest",
+                "tractor",
+                "harrow"
+              ],
+              "intents": [
+                "Skills",
+                "Tools"
+              ],
+              "perceptrons": [
+                [
+                  2.026348829269409,
+                  9.148726463317871,
+                  9.148715019226074,
+                  -5.203283786773682,
+                  -5.012258529663086,
+                  5.013094463848997
+                ],
+                [
+                  2.064763069152832,
+                  -5.057664394378662,
+                  -5.057655334472656,
+                  9.228074073791504,
+                  9.103327751159668,
+                  5.181465213902022
+                ]
+              ]
+            }
+          }
+        }
+      }
+    },
+    "intentDomains": {},
+    "extraSentences": [
+      [
+        "en",
+        "plowing"
+      ],
+      [
+        "en",
+        "planting"
+      ],
+      [
+        "en",
+        "harvesting"
+      ],
+      [
+        "en",
+        "tractor"
+      ],
+      [
+        "en",
+        "plow"
+      ],
+      [
+        "en",
+        "harrow"
+      ]
+    ]
+  },
+  "ner": {
+    "settings": {
+      "tag": "ner",
+      "entityPreffix": "%",
+      "entitySuffix": "%"
+    },
+    "rules": {}
+  },
+  "nlgManager": {
+    "settings": {
+      "tag": "nlg-manager"
+    },
+    "responses": {}
+  },
+  "actionManager": {
+    "settings": {
+      "tag": "action-manager"
+    },
+    "actions": {}
+  },
+  "slotManager": {}
+}

@@ -4,8 +4,8 @@ const multer = require('multer');
 const router = express.Router();
 
 const {authenticateJWT}=require('../middleware/middleware.js');
-const { addLand, getAllLands,updateLand, deleteLand, getLandbyid, updateOwnerProfile } = require('./owner.controller.js');
-router.post('/addland',authenticateJWT,addLand)
+const { addLand, getAllLands,updateLand, deleteLand, getLandbyid, updateOwnerProfile, addLandd } = require('./owner.controller.js');
+router.post('/addland',authenticateJWT,addLandd)
 router.get('/getmylands',authenticateJWT,getAllLands);
 router.patch('/updatemylands/:landid',authenticateJWT,updateLand);
 router.delete('/deletemylands/:landid',authenticateJWT,deleteLand);
