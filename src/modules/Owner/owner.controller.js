@@ -37,9 +37,20 @@ const extractKeywords = (description) => {
 
     return foundKeywords;
 };
+     
 
-// الدالة الرئيسية لإضافة الأرض
-const addLandd= async (req, res) => {
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, 'uploads/'); // المجلد الذي سيتم تخزين الصور فيه
+    },
+    filename: (req, file, cb) => {
+        cb(null, Date.now() + '-' + file.originalname); // اسم الملف (وقت الرفع + الاسم الأصلي)
+    },
+});
+
+const upload = multer({ storage });
+
+const addLand = async (req, res) => {
     const token = req.header('authorization'); // استخراج التوكن من الهيدر
 
     if (!token) {
@@ -59,6 +70,7 @@ const addLandd= async (req, res) => {
             return res.status(404).json({ message: 'Owner not found.' });
         }
 
+        // استخراج البيانات من الطلب
         const {
             area,
             streetName,
@@ -67,42 +79,83 @@ const addLandd= async (req, res) => {
             workType,
             town,
             specificAreas,
-            guarantee, // الحقل الخاص بالضمان
+            guaranteePrice,
+              guaranteeDuration, // مدة الضمان
+            guaranteePercentage, // نسبة الضمان
+            location, // الموقع الحالي (اختياري)
+            useCurrentLocation, // التشيك بوكس (True إذا تم تفعيله)
         } = req.body;
 
-        // التحقق من صحة نوع العمل
-        if (!['الحراثة', 'زراعة', 'الري', 'الحصاد', 'التسميد', 'مكافحة الآفات', 'تسوية الأرض', 'إزالة الأعشاب الضارة', 'إعداد البيوت البلاستيكية'].includes(workType)) {
-            return res.status(400).json({ message: 'نوع العمل غير صحيح.' });
+        // التحقق من الحقول بناءً على useCurrentLocation
+        if (useCurrentLocation) {
+         
+            const { latitude, longitude } =location;
+
+            try {
+                const apiKey = "AlzaSy6XpmiefdiJmjZyZJVslxex6jWWjzxkmrn"; // مفتاح Google Maps API
+                const geocodeUrl = `https://maps.gomaps.pro/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${apiKey}`;
+                const response = await axios.get(geocodeUrl);
+        
+                if (response.data.status !== "OK") {
+                    return res.status(400).json({ 
+                        message: "We can't find the site based on the provided location.", 
+                        error: response.data.error_message 
+                    });
+                }
+        
+                lat = latitude;
+                lng = longitude;
+                formattedAddress = response.data.results[0].formatted_address;
+                googleMapsLink = `https://www.google.com/maps?q=${lat},${lng}`;
+            } catch (error) {
+                return res.status(500).json({ message: "Error retrieving location data.", error });
+            }
+          
+        }
+        else{
+            if (!area || !description    || !streetName  || !town || !city || !workType) {
+                return res.status(400).json({ message: 'All fields (area, description, location, workType) are required.' });
+            } 
+            try {
+                const apiKey = "AlzaSy6XpmiefdiJmjZyZJVslxex6jWWjzxkmrn"; // مفتاح Google Maps API
+                const address = `${streetName}, ${town}, ${city},palestine`;
+                const geocodeUrl = `https://maps.gomaps.pro/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${apiKey}`;
+                const response = await axios.get(geocodeUrl);
+        
+                if (response.data.status !== "OK") {
+                    return res.status(400).json({ 
+                        message: "We can't find the site based on the provided address.", 
+                        error: response.data.error_message 
+                    });
+                }
+        
+                lat = response.data.results[0].geometry.location.lat;
+                lng = response.data.results[0].geometry.location.lng;
+                formattedAddress = response.data.results[0].formatted_address;
+                googleMapsLink = `https://www.google.com/maps?q=${lat},${lng}`;
+            } catch (error) {
+                return res.status(500).json({ message: "Error retrieving location data from address.", error });
+            }
+        }  
+             
+             if (specificAreas >= area) {
+                return res.status(400).json({ message: 'Specific areas must be less than the total area.' });
+            }
+
+        if (['زراعة', 'فلاحة', 'تشجير'].includes(workType)) {
+            if (!guaranteePrice || !guaranteeDuration) {
+                return res.status(400).json({
+                    message: 'For work type "زراعة", guarantee price and guarantee duration are required.',
+                });
+            }
         }
 
-        // التحقق من أن specificAreas أقل من المساحة الإجمالية
-        if (specificAreas >= area) {
-            return res.status(400).json({ message: 'Specific areas must be less than the total area.' });
-        }
-
-        // تحليل الكلمات المفتاحية من الوصف
-        const detectedKeywords = extractKeywords(description);
-
-        // إنشاء العنوان الكامل
-        const address = `${streetName}, ${town}, ${city}, Palestine`;
-
-        // الاتصال بـ API الجغرافيا للحصول على الإحداثيات
-        const apiKey = "AlzaSy6XpmiefdiJmjZyZJVslxex6jWWjzxkmrn"; // مفتاح Google Maps API
-        const geocodeUrl = `https://maps.gomaps.pro/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${apiKey}`;
-        const response = await axios.get(geocodeUrl);
-
-        if (response.data.status !== "OK") {
-            return res.status(400).json({ message: "We can't find the site.", error: response.data.error_message });
-        }
-
-        const { lat, lng } = response.data.results[0].geometry.location;
-        const formattedAddress = response.data.results[0].formatted_address;
-        const googleMapsLink = `https://www.google.com/maps?q=${lat},${lng}`;
-
-        // التحقق من رفع صورة (اختياري)
-        let landImage = null;
-        if (req.file) {
-            landImage = req.file.path; // إذا تم رفع الصورة باستخدام multer
+        if (['تلقيط', 'حصاد'].includes(workType)) {
+            if (!guaranteeDuration || !guaranteePercentage) {
+                return res.status(400).json({
+                    message: 'For work type "تلقيط" or "حصاد", guarantee duration and guarantee percentage are required.',
+                });
+            }
         }
 
         // إنشاء سجل جديد للأرض
@@ -111,18 +164,18 @@ const addLandd= async (req, res) => {
             ownerEmail: owner.email,
             contactNumber: owner.contactNumber,
             area,
-            streetName,
             description,
+            streetName,
             city,
-            workType,
             town,
             specificAreas,
-            googleMapsLink,
-            formattedAddress,
-            landImage,
+            workType,
+            guaranteePrice: guaranteePrice || null,
+            guaranteeDuration: guaranteeDuration || null,
+            guaranteePercentage: guaranteePercentage || null,
             status: 'Pending',
-            guarantee: guarantee || false,
-            detectedKeywords // الكلمات المفتاحية المستخرجة
+           googleMapsLink,
+           formattedAddress
         });
 
         // حفظ الأرض في قاعدة البيانات
@@ -161,7 +214,9 @@ const getAllLands = async (req, res) => {
         }
 
         const lands = await Land.find({ ownerId: owner._id });
-
+        if (lands.length === 0) {
+            return res.status(404).json({ message: 'No lands found for this owner.' });
+        }
         return res.status(200).json({
             message: 'Lands retrieved successfully.',
             lands,
@@ -172,14 +227,14 @@ const getAllLands = async (req, res) => {
     }
 };
 const updateLand = async (req, res) => {
-    const token = req.header('authorization');
+    const token = req.header('authorization'); // استخراج التوكن من الهيدر
 
     if (!token) {
         return res.status(401).json({ message: 'Authentication token is required.' });
     }
 
     try {
-        const decodedToken = jwt.verify(token,JWT_SECRET_KEY);
+        const decodedToken = jwt.verify(token, JWT_SECRET_KEY);
         const { email, role } = decodedToken;
 
         if (role !== 'Owner') {
@@ -187,36 +242,85 @@ const updateLand = async (req, res) => {
         }
 
         const owner = await Owner.findOne({ email });
-
         if (!owner) {
             return res.status(404).json({ message: 'Owner not found.' });
         }
 
-        const { landId } = req.params;
+        let { landId } = req.params;
+        landId = landId.replace(/^:/, '');  // إزالة الكولون إذا كان في البداية
 
-        // التأكد أن الأرض مملوكة لهذا المستخدم
         const land = await Land.findOne({ _id: landId, ownerId: owner._id });
-
         if (!land) {
             return res.status(404).json({ message: 'Land not found or does not belong to the owner.' });
         }
 
-        // تحديث الأرض
+        // استخراج البيانات من الجسم (Body) للتعديل
+        const { area, streetName, description, city, town, specificAreas, workType } = req.body;
+
+        const updatedData = {}; // كائن لتخزين البيانات المحدثة
+
+        // تحديث فقط الحقول الموجودة في الجسم (Body)
+        if (area) updatedData.area = area;
+
+        if (streetName || city || town) {
+            try {
+                // تحديث الـ streetName، city، town إذا تم إرسالهم
+                updatedData.streetName = streetName;
+                updatedData.city = city;
+                updatedData.town = town;
+
+                const apiKey = "AlzaSy6XpmiefdiJmjZyZJVslxex6jWWjzxkmrn"; // مفتاح Google Maps API
+                const address = `${streetName || ''}, ${town || ''}, ${city || ''}, palestine`; // إنشاء العنوان الذي سيتم البحث عنه
+
+                // إرسال طلب لـ Google Maps API
+                const geocodeUrl = `https://maps.gomaps.pro/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${apiKey}`;
+                const response = await axios.get(geocodeUrl);
+
+                // التحقق من حالة الاستجابة
+                if (response.data.status !== "OK") {
+                    return res.status(400).json({
+                        message: "We can't find the site based on the provided address.",
+                        error: response.data.error_message
+                    });
+                }
+
+                // استخراج الإحداثيات والبيانات
+                const lat = response.data.results[0].geometry.location.lat;
+                const lng = response.data.results[0].geometry.location.lng;
+                const formattedAddress = response.data.results[0].formatted_address;
+                const googleMapsLink = `https://www.google.com/maps?q=${lat},${lng}`;
+
+                // إضافة العنوان الكامل ورابط Google Maps
+                updatedData.formattedAddress = formattedAddress;
+                updatedData.googleMapsLink = googleMapsLink;
+
+            } catch (error) {
+                return res.status(500).json({ message: "Error retrieving location data from address.", error: error.message });
+            }
+        }
+
+        if (description) updatedData.description = description;
+        if (specificAreas) updatedData.specificAreas = specificAreas;
+        if (workType) updatedData.workType = workType;
+
+        // تحديث البيانات في قاعدة البيانات
         const updatedLand = await Land.findByIdAndUpdate(
             landId,
-            { ...req.body },
-            { new: true }
+            updatedData,
+            { new: true } // Return the updated land object
         );
 
         return res.status(200).json({
             message: 'Land updated successfully.',
             land: updatedLand,
         });
+
     } catch (error) {
-        console.error('Error updating land:', error);
-        return res.status(500).json({ message: 'Internal server error.' });
+        return res.status(500).json({ message: "An error occurred while updating the land.", error: error.message });
     }
 };
+   
+  
 const deleteLand = async (req, res) => {
     const token = req.header('authorization'); // استخراج التوكن من الهيدر
 
@@ -356,4 +460,4 @@ const updateOwnerProfile = async (req, res) => {
     }
 };
 
-module.exports={addLandd,getAllLands,updateLand,deleteLand,getLandbyid,updateOwnerProfile}
+module.exports={getAllLands,updateLand,deleteLand,addLand,getLandbyid,updateOwnerProfile}

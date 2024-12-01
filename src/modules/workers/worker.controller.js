@@ -1,7 +1,7 @@
 
 
-const express = require('express');
-const mongoose = require('mongoose');
+const multer = require('multer');
+const express = require('express');const mongoose = require('mongoose');
 const multer = require('multer');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken'); 
@@ -51,4 +51,46 @@ const updateWorkerProfile = async (req, res) => {
         return res.status(500).json({ message: 'Internal server error.' });
     }
 };
-module.exports={updateWorkerProfile}
+const jwt = require('jsonwebtoken');
+
+const showLand = async (req, res) => {
+    const token = req.header('authorization'); // استخراج التوكن من الهيدر
+
+    if (!token) {
+        return res.status(401).json({ message: 'Authentication token is required.' });
+    }
+
+    try {
+        // فك تشفير التوكن
+        const decodedToken = jwt.verify(token, JWT_SECRET_KEY);
+        const { email, role } = decodedToken;
+
+        // التأكد من أن الدور هو "Owner"
+        if (role !== 'Owner') {
+            return res.status(403).json({ message: 'Access denied. Only Owners can view their lands.' });
+        }
+
+        // العثور على الأراضي التي تخص هذا المالك بناءً على الإيميل
+        const lands = await Land.find({ email: email });
+
+        // التأكد من وجود أراضي
+        if (!lands || lands.length === 0) {
+            return res.status(404).json({ message: 'No lands found for this owner.' });
+        }
+
+        // إعادة عرض الأراضي مع التفاصيل المطلوبة فقط (مثل اسم الأرض، الموقع، إلخ)
+        const landDetails = lands.map(land => ({
+            landName: land.name,    // اسم الأرض
+            location: land.location, // الموقع
+            landLink: land.link     // رابط الموقع (يمكن تعديل ذلك بناءً على هيكل بياناتك)
+        }));
+
+        return res.status(200).json({ lands: landDetails });
+
+    } catch (err) {
+        console.error('Error while processing the request:', err);
+        return res.status(500).json({ message: 'An error occurred while fetching lands.' });
+    }
+};
+
+module.exports={updateWorkerProfile,showLand}

@@ -14,15 +14,39 @@ const ownerSchema = new mongoose.Schema({
 }, { collection: 'Owner' });
 
 const Owner = mongoose.model('Owner', ownerSchema);
-
+const allowedSkills = [
+    'خبرة في الحراثة', 
+    'خبرة بالآلات الزراعية', 
+    'مزارع', 
+    'خبرة في الزراعة', 
+    'خبرة في زراعة المحاصيل', 
+    'تقني ري', 
+    'خبرة في أنظمة الري', 
+    'عامل حصاد', 
+    'خبرة في جمع المحاصيل', 
+    'خبرة في التسميد', 
+    'تقني تسميد', 
+    'خبير مكافحة آفات', 
+    'خبرة في مكافحة الحشرات', 
+    'خبرة في استخدام المبيدات', 
+    'خبرة في تسوية الأرض', 
+    'متخصص في تجهيز الأراضي', 
+    'عامل إزالة الأعشاب', 
+    'خبرة في المكافحة', 
+    'خبرة في المعدات الزراعية', 
+    'تقني محميات زراعية', 
+    'خبرة في البيوت البلاستيكية', 
+    'عامل نقل', 
+    'خبرة في شحن المحاصيل'
+];
 
 const workerSchema = new mongoose.Schema({
     email: { type: String, required: true, unique: true, lowercase: true },
     password: { type: String, required: true },
     userName: { type: String, required: true },
     skills: {
-        type: [String],  // هنا قمنا بتحديد أن المهارات ستكون مصفوفة من نوع String
-        required: true,
+        type: [String],  // تحديد أن المهارات ستكون مصفوفة من نوع String
+        optional,
         validate: {
             validator: function (value) {
                 return value.every(skill => allowedSkills.includes(skill));
@@ -33,6 +57,7 @@ const workerSchema = new mongoose.Schema({
     contactNumber: { type: String, required: true },
     role: { type: String, default: 'Worker' }, // إضافة حقل role
     Status: { type: String, default: 'active' }, // إضافة حقل status
+    isGuarantor: { type: Boolean, default: false } // إضافة حقل isGuarantor (هل العامل ضامن؟)
 }, { collection: 'Worker' });
 
 const Worker = mongoose.model('Worker', workerSchema);
@@ -51,58 +76,85 @@ const tokenSchema = new mongoose.Schema({
     skills: { type: [String] }         // المهارات (لـ Worker فقط)
 }, { timestamps: true }); // إضافة الطوابع الزمنية (createdAt, updatedAt)
 const Token = mongoose.model('Token', tokenSchema);
-const landSchema = new mongoose.Schema({
-    ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Owner', required: true }, // معرف المالك
-    ownerEmail: { type: String, required: true }, // بريد المالك الإلكتروني
-    contactNumber: { type: String }, // رقم التواصل الخاص بالمالك
-    area: { type: Number, required: true }, // مساحة الأرض
-    streetName: { type: String, required: true }, // اسم الشارع
-    description: { type: String }, // وصف الأرض
-    city: { type: String, required: true }, // المدينة
-    town: { type: String, required: true }, // البلدة
-    workType: { 
-        type: String, 
-       optional, 
-        enum: [
-            'حراثة', 
-            'الحراثة', 
-            'زراعة', 
 
-            'الزراعة', 
-            'ري', 
-            'حصاد', 
-            'تسميد', 
-            'مكافحة الآفات', 
-            'تسوية الأرض', 
-            'إزالة الأعشاب الضارة', 
-            'أنظمة التصريف', 
-            'إعداد البيوت البلاستيكية'
-        ], // الأنواع المسموح بها للعمل
+const landSchema = new mongoose.Schema({
+    ownerId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Owner', // اسم الـ Schema الذي يحتوي على معلومات المالك
+        required: true,
     },
-    specificAreas: { 
-        type: Number, 
-        required: true, 
-        validate: {
-            validator: function(value) {
-                return value < this.area; // التأكد من أن specificAreas أصغر من المساحة الإجمالية
-            },
-            message: 'Specific areas must be less than the total area.'
-        }
+    ownerEmail: {
+        type: String,
+        required: true,
+        match: [/.+@.+\..+/, 'Invalid email address'], // التحقق من صحة البريد الإلكتروني
     },
-    googleMapsLink: { type: String }, // رابط لموقع الأرض على خرائط Google
-    formattedAddress: { type: String }, // العنوان المُنسّق للأرض
-    landImage: { type: String }, // صورة الأرض (اختياري)
-    status: { 
-        type: String, 
-        enum: ['Pending', 'Approved', 'Rejected'], 
-        default: 'Pending' 
+    contactNumber: {
+        type: String,
+        required: true,
     },
-    detectedKeywords: {
-        type: [String],  // تعديل هنا للسماح بمصفوفة من السلاسل النصية
-        required: true
+    area: {
+        type: Number, // المساحة الكلية للأرض
+        required: true,
+        min: [1, 'Area must be greater than 0'],
     },
-    guarantee: { type: Boolean, default: false }, // الحقل الجديد
-}, { timestamps: true }); // إضافة الطوابع الزمنية (createdAt, updatedAt)
+    description: {
+        type: String,
+        required: true,
+        maxlength: [500, 'Description cannot exceed 500 characters'],
+    },
+    streetName: {
+        type: String,
+        required: false, // قد يكون غير مطلوب عند استخدام الموقع الحالي
+    },
+    city: {
+        type: String,
+        required: false,
+    },
+    town: {
+        type: String,
+        required: false,
+    },
+    specificAreas: {
+        type: Number, // المناطق المحددة داخل الأرض
+optional,
+        min: [0, 'Specific areas must be 0 or greater'],
+    },
+    workType: {
+        type: String,
+        required: true,
+        enum: ['زراعة', 'فلاحة', 'تشجير', 'تلقيط', 'حصاد'], // الخيارات المتاحة لنوع العمل
+    },
+    guaranteePrice: {
+        type: Number, // السعر الذي يطلبه المالك كضمان (قد يكون مطلوبًا لنوع عمل معين)
+        default: null,
+    },
+    guaranteeDuration: {
+        type: String, // مدة الضمان
+        default: null,
+    },
+    guaranteePercentage: {
+        type: Number, // نسبة الضمان (قد يكون مطلوبًا لنوع عمل معين)
+        default: null,
+    },
+    status: {
+        type: String,
+        enum: ['Accepted', 'Pending', 'Rejected'], // حالات الأرض
+        default: 'Pending',
+    },
+    formattedAddress: {
+        type: String, // العنوان المترجم (المستخرج من API)
+        required: false,
+    },
+    googleMapsLink: {
+        type: String, // رابط Google Maps لموقع الأرض
+        required: false,
+    },
+    createdAt: {
+        type: Date,
+        default: Date.now, // يتم تعيين تاريخ الإضافة تلقائيًا
+    },
+});
+
 const Land = mongoose.model('Land', landSchema);
 
 

@@ -35,7 +35,31 @@ const signupSchema = Joi.object({
         'any.required': `"Contact Number" is a required field`
     })
 });
-
+const allowedSkills = [
+    'خبرة في الحراثة', 
+    'خبرة بالآلات الزراعية', 
+    'مزارع', 
+    'خبرة في الزراعة', 
+    'خبرة في زراعة المحاصيل', 
+    'تقني ري', 
+    'خبرة في أنظمة الري', 
+    'عامل حصاد', 
+    'خبرة في جمع المحاصيل', 
+    'خبرة في التسميد', 
+    'تقني تسميد', 
+    'خبير مكافحة آفات', 
+    'خبرة في مكافحة الحشرات', 
+    'خبرة في استخدام المبيدات', 
+    'خبرة في تسوية الأرض', 
+    'متخصص في تجهيز الأراضي', 
+    'عامل إزالة الأعشاب', 
+    'خبرة في المكافحة', 
+    'خبرة في المعدات الزراعية', 
+    'تقني محميات زراعية', 
+    'خبرة في البيوت البلاستيكية', 
+    'عامل نقل', 
+    'خبرة في شحن المحاصيل'
+];
 const workerSignupSchema = Joi.object({
     email: Joi.string().email().required().messages({
         'string.email': `"Email" must be a valid email address`,
@@ -57,18 +81,22 @@ const workerSignupSchema = Joi.object({
         'any.required': `"User Name" is a required field`
     }),
     skills: Joi.array().items(
-        Joi.string().min(1).required().messages({
-            'string.min': `"Skill" cannot be empty`,
+        Joi.string().valid(...allowedSkills).required().messages({
+            'any.only': `"Skill" must be one of the allowed skills`,
             'any.required': `"Skill" is required`
         })
     ).min(1).required().messages({
         'array.min': `"Skills" must include at least one skill`,
         'any.required': `"Skills" is a required field`
     }),
+    
     contactNumber: Joi.string().pattern(/^[0-9]{10,15}$/).required().messages({
         'string.empty': `"Contact Number" cannot be empty`,
         'string.pattern.base': `"Contact Number" should contain only numbers and be between 10 and 15 digits`,
         'any.required': `"Contact Number" is a required field`
+    }), 
+     isGuarantor: Joi.boolean().optional().messages({
+        'boolean.base': `"Is Guarantor" must be a boolean value`
     })
 
 });

@@ -122,68 +122,80 @@ const signupowner= async (req, res) => {
         return res.status(500).json({ message: 'Error adding owner' });
     }
 };
-const allowedSkills = [
-    'خبرة في الحراثة', 
-    'خبرة بالآلات الزراعية', 
-    'مزارع', 
-    'خبرة في الزراعة', 
-    'خبرة في زراعة المحاصيل', 
-    'تقني ري', 
-    'خبرة في أنظمة الري', 
-    'عامل حصاد', 
-    'خبرة في جمع المحاصيل', 
-    'خبرة في الزراعة', 
-    'خبرة في التسميد', 
-    'تقني تسميد', 
-    'خبير مكافحة آفات', 
-    'خبرة في مكافحة الحشرات', 
-    'خبرة في استخدام المبيدات', 
-    'خبرة في تسوية الأرض', 
-    'متخصص في تجهيز الأراضي', 
-    'عامل إزالة الأعشاب', 
-    'خبرة في المكافحة', 
-    'خبرة في المعدات الزراعية', 
-    'تقني محميات زراعية', 
-    'خبرة في البيوت البلاستيكية', 
-    'عامل نقل', 
-    'خبرة في شحن المحاصيل'
-];
 
 const signupWorker = async (req, res) => {
+    const allowedSkills = [
+        'خبرة في الحراثة', 
+        'خبرة بالآلات الزراعية', 
+        'مزارع', 
+        'خبرة في الزراعة', 
+        'خبرة في زراعة المحاصيل', 
+        'تقني ري', 
+        'خبرة في أنظمة الري', 
+        'عامل حصاد', 
+        'خبرة في جمع المحاصيل', 
+        'خبرة في التسميد', 
+        'تقني تسميد', 
+        'خبير مكافحة آفات', 
+        'خبرة في مكافحة الحشرات', 
+        'خبرة في استخدام المبيدات', 
+        'خبرة في تسوية الأرض', 
+        'متخصص في تجهيز الأراضي', 
+        'عامل إزالة الأعشاب', 
+        'خبرة في المكافحة', 
+        'خبرة في المعدات الزراعية', 
+        'تقني محميات زراعية', 
+        'خبرة في البيوت البلاستيكية', 
+        'عامل نقل', 
+        'خبرة في شحن المحاصيل'
+    ];
+
     const { error } = workerSignupSchema.validate(req.body, { abortEarly: false });
     if (error) {
         const errorMessages = error.details.map(detail => detail.message);
         return res.status(400).json({ message: 'Validation error', errors: errorMessages });
     }
 
-    const { email, password, confirmPassword, userName ,skills,contactNumber} = req.body;
+    const { email, password, confirmPassword, userName, skills, contactNumber, isGuarantor } = req.body;
 
     if (password !== confirmPassword) {
         return res.status(400).json({ message: 'Password and confirm password do not match' });
     }
-  // تحقق من أن المهارات المدخلة صحيحة
-  if (!skills.every(skill => allowedSkills.includes(skill))) {
-    return res.status(400).json({ message: 'اختر مهارات لها علاقة بأعمال الأرض' });
-}
+
+    if (!Array.isArray(skills)) {
+        return res.status(400).json({ message: 'Skills must be an array' });
+    }
+
+    if (!skills.every(skill => allowedSkills.includes(skill))) {
+        return res.status(400).json({ 
+            message: 'اختر مهارات لها علاقة بأعمال الأرض',
+            allowedSkills
+        });
+    }
+
     try {
-        // Hash the password
         const hashedPassword = await bcrypt.hash(password, 10);
         
-        // Create a new Worker document
         const newWorker = new Worker({
             email,
             password: hashedPassword,  // Use hashed password
             userName,
             skills,
-            contactNumber
+            contactNumber,
+            isGuarantor: isGuarantor || false // إذا لم يكن تم اختيارها، تكون القيمة False
         });
+
         await newWorker.save();
         console.log("Worker added successfully");
        
         return res.status(201).json({ message: 'Worker added successfully' });
 
     } catch (error) {
-        console.error("Error adding worker:", error);
+        console.error("Error adding worker:", {
+            errorMessage: error.message,
+            stack: error.stack,
+            code: error.code
+        });
 
         // Check for duplicate email error
         if (error.code === 11000) {
@@ -194,6 +206,8 @@ const signupWorker = async (req, res) => {
         return res.status(500).json({ message: 'Error adding worker' });
     }
 };
+
+
 const login = async (req, res) => {
     try {
         const { error } = loginSchema.validate(req.body, { abortEarly: false });
