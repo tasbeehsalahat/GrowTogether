@@ -20,7 +20,8 @@ const upload = multer({ storage: storage });
 const { signupowner,profile,deactivationaccount, login,signupWorker,
   updateprofile,logout,getconfirm,sendconfirm,verifyResetCode,
   resetPassword,myprofile,deleteAccount,forgotPassword, updatePassword,
-  logincompany} = require('../auth/auth.controller.js');
+  logincompany,
+  signupwstep2} = require('../auth/auth.controller.js');
 const router = express.Router();
 const rateLimit = require('express-rate-limit');
 const loginLimiter = rateLimit({
@@ -56,5 +57,5 @@ router.post('/confirm-account',getconfirm);
   router.post('/resetPassword',resetPassword);
   router.patch('/deactiveaccount',authenticateJWT,deactivationaccount);
   router.post('/logincompany',logincompany);
-
+  router.post('/register-step2/:workerId',signupwstep2);
 module.exports = router; 

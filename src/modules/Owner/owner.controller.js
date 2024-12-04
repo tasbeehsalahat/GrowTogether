@@ -1,13 +1,12 @@
 require('dotenv').config(); // لتحميل المتغيرات من .env
+const cron = require('node-cron');
 
-const express = require('express');
-const mongoose = require('mongoose');
 const multer = require('multer');
-const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken'); 
-const {Owner,Worker,Token,Land} = require('../DB/types.js');  // تأكد من أن المسار صحيح
+const {Owner,Worker,Token,requests,WorkAnnouncement,Land,works} = require('../DB/types.js');  // تأكد من أن المسار صحيح
 const JWT_SECRET_KEY = '1234#';  // نفس المفتاح السري الذي ستستخدمه للتحقق من التوكن
 const axios=require('axios');
+const nodemailer = require('nodemailer');
 
 const keywords = {
     "حراثة": ["فلاحة", "حرث", "تقليب التربة", "إعداد الأرض"],
@@ -90,7 +89,11 @@ const addLand = async (req, res) => {
         if (useCurrentLocation) {
          
             const { latitude, longitude } =location;
-
+  // تحقق إذا كان الموقع قد تم إدخاله سابقًا
+  const existingLand = await Land.findOne({ lat: latitude, lng: longitude });
+  if (existingLand) {
+      return res.status(400).json({ message: 'This location has already been entered.' });
+  }
             try {
                 const apiKey = "AlzaSy6XpmiefdiJmjZyZJVslxex6jWWjzxkmrn"; // مفتاح Google Maps API
                 const geocodeUrl = `https://maps.gomaps.pro/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${apiKey}`;
@@ -113,7 +116,7 @@ const addLand = async (req, res) => {
           
         }
         else{
-            if (!area || !description    || !streetName  || !town || !city || !workType) {
+            if (!area || !description    || !streetName  || !city || !workType) {
                 return res.status(400).json({ message: 'All fields (area, description, location, workType) are required.' });
             } 
             try {
@@ -133,6 +136,8 @@ const addLand = async (req, res) => {
                 lng = response.data.results[0].geometry.location.lng;
                 formattedAddress = response.data.results[0].formatted_address;
                 googleMapsLink = `https://www.google.com/maps?q=${lat},${lng}`;
+                latitude= lat; // يتم تخزين خط العرض المستخرج تلقائيًا
+                longitude= lng;
             } catch (error) {
                 return res.status(500).json({ message: "Error retrieving location data from address.", error });
             }
@@ -157,7 +162,7 @@ const addLand = async (req, res) => {
                 });
             }
         }
-
+console.log(latitude);
         // إنشاء سجل جديد للأرض
         const newLand = new Land({
             ownerId: owner._id,
@@ -173,9 +178,16 @@ const addLand = async (req, res) => {
             guaranteePrice: guaranteePrice || null,
             guaranteeDuration: guaranteeDuration || null,
             guaranteePercentage: guaranteePercentage || null,
-            status: 'Pending',
+            isguarntee: 'true',
            googleMapsLink,
-           formattedAddress
+           formattedAddress,
+           advertisement:'false',
+           status:'false',
+           location: {
+            latitude: lat, // يتم تخزين خط العرض المستخرج تلقائيًا
+            longitude: lng, // يتم تخزين خط الطول المستخرج تلقائيًا
+        },// تخزين خط الطول
+    
         });
 
         // حفظ الأرض في قاعدة البيانات
@@ -190,6 +202,39 @@ const addLand = async (req, res) => {
         return res.status(500).json({ message: 'Internal server error.' });
     }
 };
+cron.schedule('*/1 * * * *', async () => {
+    console.log('Running automatic advertisement checkguarntee lands...');
+    try {
+        const landsToAdvertise = await Land.find({ status: 'false', advertisement: 'false' ,isguarntee:'true'});
+
+        if (landsToAdvertise.length === 0) {
+            console.log('No lands to advertise. All lands are already advertised.');
+            return;
+        }
+
+        for (const land of landsToAdvertise) {
+            // التحقق من وجود الحقل location
+            if (!land.location || !land.location.latitude || !land.location.longitude) {
+                console.log(`Land with ID ${land._id} is missing location data. Skipping...`);
+                continue; // تجاوز الأرض التي تفتقد الحقل location
+            }
+
+            const creationTime = new Date(land.createdAt);
+            const currentTime = new Date();
+
+            // التحقق إذا مرت أكثر من 5 دقائق على إنشائها
+            const elapsedTime = (currentTime - creationTime) / 1000 / 60; // الزمن بالدقائق
+            if (elapsedTime >= 5) {
+                land.advertisement = 'true';
+                await land.save();
+                console.log(`Land with ID ${land._id} has been advertised automatically.`);
+            }
+        }
+
+    } catch (error) {
+        console.error('Error in automatic advertisement:', error);
+    }
+});
 
 
 const getAllLands = async (req, res) => {
@@ -459,5 +504,715 @@ const updateOwnerProfile = async (req, res) => {
         return res.status(500).json({ message: 'Internal server error.' });
     }
 };
+const getLandAdvertisement = async (req, res) => {
+    try {
+        // البحث عن جميع الأراضي التي تم الإعلان عنها
+        const advertisedLands = await Land.find({ advertisement: 'true' });
 
-module.exports={getAllLands,updateLand,deleteLand,addLand,getLandbyid,updateOwnerProfile}
+        // التحقق إذا لم يكن هناك أراضٍ معلنة
+        if (advertisedLands.length === 0) {
+            return res.status(404).json({ message: 'No advertised lands found.' });
+        }
+
+        // إرسال قائمة الأراضي المعلنة
+        res.status(200).json({
+            message: 'Advertised lands retrieved successfully.',
+            lands: advertisedLands,
+        });
+    } catch (error) {
+        console.error('Error fetching advertised lands:', error);
+        res.status(500).json({ message: 'Internal server error.' });
+    }
+};
+
+const addLanddaily = async (req, res) => {
+    const token = req.header('authorization'); // استخراج التوكن من الهيدر
+
+    if (!token) {
+        return res.status(401).json({ message: 'Authentication token is required.' });
+    }
+
+    try {
+        const decodedToken = jwt.verify(token, JWT_SECRET_KEY);
+        const { email, role } = decodedToken;
+
+        if (role !== 'Owner') {
+            return res.status(403).json({ message: 'Access denied. Only Owners can add land.' });
+        }
+
+        const owner = await Owner.findOne({ email });
+        if (!owner) {
+            return res.status(404).json({ message: 'Owner not found.' });
+        }
+
+        // استخراج البيانات من الطلب
+        const {
+            area,
+            streetName,
+            description,
+            city,
+            workType,
+            town,
+            specificAreas,
+            location, // الموقع الحالي (اختياري)
+            useCurrentLocation, // التشيك بوكس (True إذا تم تفعيله)
+        } = req.body;
+
+        // التحقق من الحقول بناءً على useCurrentLocation
+        let lat, lng, formattedAddress, googleMapsLink;
+
+        if (useCurrentLocation) {
+            const { latitude, longitude } = location;
+  // تحقق إذا كان الموقع قد تم إدخاله سابقًا
+  const existingLand = await Land.findOne({ lat: latitude, lng: longitude });
+  if (existingLand) {
+      return res.status(400).json({ message: 'This location has already been entered.' });
+  }
+            try {
+                const apiKey = "AlzaSy6XpmiefdiJmjZyZJVslxex6jWWjzxkmrn"; // مفتاح Google Maps API
+                const geocodeUrl = `https://maps.gomaps.pro/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${apiKey}`;
+                const response = await axios.get(geocodeUrl);
+        
+                if (response.data.status !== "OK") {
+                    return res.status(400).json({ 
+                        message: "We can't find the site based on the provided location.", 
+                        error: response.data.error_message 
+                    });
+                }
+        
+                lat = latitude;
+                lng = longitude;
+                formattedAddress = response.data.results[0].formatted_address;
+                googleMapsLink = `https://www.google.com/maps?q=${lat},${lng}`;
+            } catch (error) {
+                return res.status(500).json({ message: "Error retrieving location data.", error });
+            }
+        } else {
+            if (!area || !description || !streetName || !city || !workType) {
+                return res.status(400).json({ message: 'All fields (area, description, location, workType) are required.' });
+            }
+
+            try {
+                const apiKey = "AlzaSy6XpmiefdiJmjZyZJVslxex6jWWjzxkmrn"; // مفتاح Google Maps API
+                const address = `${streetName}, ${town}, ${city}, palestine`;
+                const geocodeUrl = `https://maps.gomaps.pro/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${apiKey}`;
+                const response = await axios.get(geocodeUrl);
+        
+                if (response.data.status !== "OK") {
+                    return res.status(400).json({ 
+                        message: "We can't find the site based on the provided address.", 
+                        error: response.data.error_message 
+                    });
+                }
+        
+                lat = response.data.results[0].geometry.location.lat;
+                lng = response.data.results[0].geometry.location.lng;
+                formattedAddress = response.data.results[0].formatted_address;
+                googleMapsLink = `https://www.google.com/maps?q=${lat},${lng}`;
+            } catch (error) {
+                return res.status(500).json({ message: "Error retrieving location data from address.", error });
+            }
+        }
+
+        if (specificAreas >= area) {
+            return res.status(400).json({ message: 'Specific areas must be less than the total area.' });
+        }
+
+        // إنشاء سجل جديد للأرض
+        const newLand = new Land({
+            ownerId: owner._id,
+            ownerEmail: owner.email,
+            contactNumber: owner.contactNumber,
+            area,
+            description,
+            streetName,
+            city,
+            town,
+            specificAreas,
+            workType,
+            googleMapsLink,
+            formattedAddress,
+            advertisement: 'false', 
+              location: {
+                latitude: lat, // يتم تخزين خط العرض المستخرج تلقائيًا
+                longitude: lng, // يتم تخزين خط الطول المستخرج تلقائيًا
+            },
+       
+        });
+
+        // حفظ الأرض في قاعدة البيانات
+        const savedLand = await newLand.save();
+
+        return res.status(201).json({
+            message: 'Land added successfully.',
+            land: savedLand,
+        });
+    } catch (error) {
+        console.error('Error adding land:', error);
+        return res.status(500).json({ message: 'Internal server error.' });
+    }
+};
+const getguarntors = async (req, res) => {
+    try {
+        // استخراج التوكن من الهيدر
+        const token = req.header('authorization');
+
+        if (!token) {
+            return res.status(401).json({ message: 'Authentication token is required.' });
+        }
+
+        // فك تشفير التوكن والتحقق منه
+        const decodedToken = jwt.verify(token, JWT_SECRET_KEY);
+        const { email, role } = decodedToken;
+
+        if (role !== 'Owner') {
+            return res.status(403).json({ message: 'Access denied. Only Owners can access this data.' });
+        }
+
+        // العثور على المالك بناءً على الإيميل
+        const owner = await Owner.findOne({ email });
+
+        if (!owner) {
+            return res.status(404).json({ message: 'Owner not found.' });
+        }
+
+        // استخراج معرف الأرض من params
+        let { landid } = req.params;
+
+        if (!landid) {
+            return res.status(400).json({ message: 'Land ID is required.' });
+        }
+        landid = landid.replace(/^:/, '');
+
+        const land = await Land.findOne({ _id: landid, ownerId: owner._id });
+
+        if (!land) {
+            return res.status(404).json({ message: 'Land not found or does not belong to the owner.' });
+        }
+
+        const { city, town, isguarntee, streetName } = land;
+
+        if (!city || !town || !streetName) {
+            return res.status(400).json({ message: 'Land city, town, and street name are required.' });
+        }
+
+        let workers;
+if(isguarntee){
+          // أولاً: البحث باستخدام اسم الشارع
+          workers = await Worker.find({
+            areas: { $regex: streetName, $options: 'i' },
+            isGuarantor: true, // إضافة الشرط مباشرة
+
+        });
+
+        // ثانياً: إذا لم يتم العثور على عمال، البحث باستخدام اسم البلدة
+        if (workers.length === 0) {
+            workers = await Worker.find({
+                areas: { $regex: town, $options: 'i' },
+                isGuarantor: true, // إضافة الشرط مباشرة
+
+            });
+        }
+
+        // ثالثاً: إذا لم يتم العثور على عمال، البحث باستخدام اسم المدينة
+        if (workers.length === 0) {
+            workers = await Worker.find({
+                areas: { $regex: city, $options: 'i' },
+                isGuarantor: true, // إضافة الشرط مباشرة
+
+            });
+        }
+
+        // رابعاً: إذا لم يتم العثور على عمال، البحث باستخدام عدة شروط (الشارع، البلدة، المدينة)
+        if (workers.length === 0) {
+            workers = await Worker.find({
+                $or: [
+                    { areas: { $regex: streetName, $options: 'i' } },
+                    { areas: { $regex: town, $options: 'i' } },
+                    { areas: { $regex: city, $options: 'i' } },
+                ],        isGuarantor: true, // إضافة الشرط مباشرة
+
+            });
+        }
+
+        // إذا لم يتم العثور على عمال
+        if (workers.length === 0) {
+            return res.status(404).json({ message: 'No workers found for this land.' });
+        }
+
+        // إرجاع العمال
+        return res.status(200).json(workers);
+    }
+/////if its not gyrantee lands
+        // أولاً: البحث باستخدام اسم الشارع
+        workers = await Worker.find({
+            areas: { $regex: streetName, $options: 'i' }        });
+
+        // ثانياً: إذا لم يتم العثور على عمال، البحث باستخدام اسم البلدة
+        if (workers.length === 0) {
+            workers = await Worker.find({
+                areas: { $regex: town, $options: 'i' }
+            });
+        }
+
+        // ثالثاً: إذا لم يتم العثور على عمال، البحث باستخدام اسم المدينة
+        if (workers.length === 0) {
+            workers = await Worker.find({
+                areas: { $regex: city, $options: 'i' }
+            });
+        }
+
+        // رابعاً: إذا لم يتم العثور على عمال، البحث باستخدام عدة شروط (الشارع، البلدة، المدينة)
+        if (workers.length === 0) {
+            workers = await Worker.find({
+                $or: [
+                    { areas: { $regex: streetName, $options: 'i' } },
+                    { areas: { $regex: town, $options: 'i' } },
+                    { areas: { $regex: city, $options: 'i' } },
+                ],
+                ...(isguarntee ? { isguarntee: true } : {}),
+            });
+        }
+
+        // إذا لم يتم العثور على عمال
+        if (workers.length === 0) {
+            return res.status(404).json({ message: 'No workers found for this land.' });
+        }
+
+        // إرجاع العمال
+        return res.status(200).json(workers);
+    } catch (error) {
+        console.error('Error retrieving workers:', error);
+        return res.status(500).json({ message: 'Server error occurred.' });
+    }
+};
+const createRequest = async (req, res) => {
+    try {
+        // استخراج التوكن من الهيدر
+        const token = req.header('authorization');
+        if (!token) {
+            return res.status(401).json({ message: 'Authentication token is required.' });
+        }
+
+        // فك تشفير التوكن والتحقق منه
+        const decodedToken = jwt.verify(token, JWT_SECRET_KEY);
+        const { email, role } = decodedToken;
+
+        if (role !== 'Owner') {
+            return res.status(403).json({ message: 'Access denied. Only Owners can send requests.' });
+        }
+
+        // العثور على المالك بناءً على الإيميل
+        const owner = await Owner.findOne({ email });
+        if (!owner) {
+            return res.status(404).json({ message: 'Owner not found.' });
+        }
+
+        // استخراج landId و workerId من الرابط
+        let { landId, workerId } = req.params;
+        landId= landId.replace(/^:/, '');  // هذه الدالة ستزيل النقطتين في حال كانت في بداية المعرف
+        workerId = workerId.replace(/^:/, '');  // هذه الدالة ستزيل النقطتين في حال كانت في بداية المعرف
+        console.log(`Land ID: ${landId}, Worker ID: ${workerId}`);
+
+        if (!landId || !workerId) {
+            return res.status(400).json({ message: 'Land ID and Worker ID are required in the URL.' });
+        }
+
+        const land = await Land.findOne({ _id: landId, ownerId: owner._id });
+        if (!land) {
+            return res.status(404).json({ message: 'Land not found or does not belong to the owner.' });
+        }
+        const worker = await Worker.findById(workerId);
+        if (!worker) {
+            return res.status(404).json({ message: 'Worker not found.' });
+        }
+
+        // إنشاء الطلب
+        const newRequest = new requests({
+            landId,
+            workerId,
+            ownerId: owner._id,
+owneremail:email        });
+
+        await newRequest.save();
+
+        // إرسال الرد
+        return res.status(201).json({
+            message: 'Request sent successfully.',
+            request: {
+                _id: newRequest._id,
+                landId: newRequest.landId,
+                workerId: newRequest.workerId,
+                ownerId: newRequest.ownerId,
+                status:'Pending'
+            },
+        });
+    } catch (error) {
+        console.error('Error creating request:', error);
+        return res.status(500).json({ message: 'Server error occurred.' });
+    }
+};
+
+
+const calculateWorkersForLand = async (req, res) => {
+    try {
+        const token = req.header('authorization'); // استخراج التوكن من الهيدر
+
+        if (!token) {
+            return res.status(401).json({ message: 'Authentication token is required.' });
+        }
+
+        const decodedToken = jwt.verify(token, JWT_SECRET_KEY); // فك تشفير التوكن
+        const { email, role } = decodedToken;
+
+        if (role !== 'Owner') {
+            return res.status(403).json({ message: 'Access denied. Only Owners can access this data.' });
+        }
+
+        // العثور على المالك بناءً على الإيميل
+        const owner = await Owner.findOne({ email });
+
+        if (!owner) {
+            return res.status(404).json({ message: 'Owner not found.' });
+        }
+
+        // استخراج معرف الأرض من params
+        let { landid } = req.params; 
+
+        if (!landid) {
+            return res.status(400).json({ message: 'Land ID is required.' });
+        }
+        landid = landid.replace(/^:/, '');
+
+        const land = await Land.findOne({ _id: landid, ownerId: owner._id });
+
+        if (!land) {
+            return res.status(404).json({ message: 'Land not found or does not belong to the owner.' });
+        }
+
+
+        let numberOfWorkers = 0;
+        let workersPerArea = 0;
+
+        switch (land.workType) {
+            case 'زراعة':
+                workersPerArea = 1 / 50; // 1 عامل لكل 50 متر مربع
+                break;
+            case 'فلاحة':
+                workersPerArea = 1 / 60; // 1 عامل لكل 60 متر مربع
+                break;
+            case 'تشجير':
+                workersPerArea = 1 / 70; // 1 عامل لكل 70 متر مربع
+                break;
+            case 'تلقيط':
+                workersPerArea = 1 / 30; // 1 عامل لكل 30 متر مربع
+                break;
+            case 'حصاد':
+                workersPerArea = 1 / 40; // 1 عامل لكل 40 متر مربع
+                break;
+            case 'حراثة':
+                workersPerArea = 1 / 100; // 1 عامل لكل 100 متر مربع
+                break;
+            case 'تسميد':
+                workersPerArea = 1 / 100; // 1 عامل لكل 100 متر مربع
+                break;
+            case 'رش مبيدات حشرية':
+                workersPerArea = 1 / 50; // 1 عامل لكل 50 متر مربع
+                break;
+            case 'اعداد بيوت بلاستيكية':
+                workersPerArea = 1 / 20; // 1 عامل لكل 20 متر مربع
+                break;
+            case 'نقل محاصيل':
+                workersPerArea = 1 / 40; // 1 عامل لكل 40 متر مربع
+                break;
+            default:
+                return res.status(400).json({ message: 'Invalid work type.' });
+        }
+
+        // حساب عدد العمال بناءً على المساحة
+        numberOfWorkers = Math.ceil(land.area * workersPerArea);
+
+        return res.status(200).json({
+            message: 'Number of workers calculated successfully.',
+            landId: land._id,
+            numberOfWorkers: numberOfWorkers,
+            landDescription: land.description,
+            workType: land.workType,
+            formattedAddress: land.formattedAddress,
+            googleMapsLink: land.googleMapsLink
+        });
+
+    } catch (error) {
+        console.error('Error calculating workers:', error);
+        return res.status(500).json({ message: 'Server error occurred.' });
+    }
+};
+const createWorkAnnouncement = async (req, res) => {
+    try {
+        const token = req.header('authorization'); // استخراج التوكن من الهيدر
+
+        if (!token) {
+            return res.status(401).json({ message: 'Authentication token is required.' });
+        }
+
+        const decodedToken = jwt.verify(token, JWT_SECRET_KEY); // فك تشفير التوكن
+        const { email, role } = decodedToken;
+
+        if (role !== 'Owner') {
+            return res.status(403).json({ message: 'Access denied. Only Owners can access this data.' });
+        }
+
+        // العثور على المالك بناءً على الإيميل
+        const owner = await Owner.findOne({ email });
+
+        if (!owner) {
+            return res.status(404).json({ message: 'Owner not found.' });
+        }
+
+        // استخراج معرف الأرض من params
+        let { landid } = req.params; 
+
+        if (!landid) {
+            return res.status(400).json({ message: 'Land ID is required.' });
+        }
+
+        // إزالة النقطتين من بداية landid (في حال كانت موجودة)
+        landid = landid.replace(/^:/, '');
+
+        // العثور على الأرض والتأكد من أنها مملوكة لهذا المالك
+        const land = await Land.findOne({ _id: landid, ownerId: owner._id });
+
+        if (!land) {
+            return res.status(404).json({ message: 'Land not found or does not belong to the owner.' });
+        }
+
+        // فحص ما إذا كانت الأرض قد تم الإعلان عنها سابقًا
+        const existingAnnouncement = await WorkAnnouncement.findOne({ landid });
+
+        if (existingAnnouncement) {
+            return res.status(400).json({ message: 'This land has already been announced.' });
+        }
+        const { numberOfWorkers, startTime, endTime, startDate, endDate, dailyRate } = req.body;
+
+        // التأكد من وجود الحقول المطلوبة
+        if (!numberOfWorkers || !startTime || !endTime || !startDate || !endDate || !dailyRate) {
+            return res.status(400).json({ message: 'All fields are required.' });
+        }
+
+        // إنشاء إعلان العمل المرتبط بالأرض
+        const workAnnouncement = new WorkAnnouncement({
+            landid,
+            numberOfWorkers,
+            startTime,
+            endTime,
+            startDate,
+            endDate,
+            dailyRate,
+            workType: land.workType, // نوع العمل من الأرض
+            location: land.location, // الموقع
+            formattedAddress: land.formattedAddress,
+            googleMapsLink: land.googleMapsLink
+        });
+
+        // حفظ الإعلان في قاعدة البيانات
+        await workAnnouncement.save();
+
+        return res.status(201).json({
+            message: 'Work announcement created successfully.',
+            workAnnouncement: workAnnouncement
+        });
+
+    } catch (error) {
+        console.error('Error creating work announcement:', error);
+        return res.status(500).json({ message: 'Server error occurred.' });
+    }
+};
+
+const showLand = async (req, res) => {
+    const token = req.header('authorization'); // استخراج التوكن من الهيدر
+
+    if (!token) {
+        return res.status(401).json({ message: 'Authentication token is required.' });
+    }
+
+    try {
+        // فك تشفير التوكن
+        const decodedToken = jwt.verify(token, JWT_SECRET_KEY);
+        const { email, role } = decodedToken;
+
+        // التأكد من أن الدور هو "Owner"
+        if (role !== 'Owner') {
+            return res.status(403).json({ message: 'Access denied. Only Owners can view their lands.' });
+        }
+
+        // العثور على الأراضي التي تخص هذا المالك بناءً على الإيميل
+        const lands = await Land.find({ email: email });
+
+        // التأكد من وجود أراضي
+        if (!lands || lands.length === 0) {
+            return res.status(404).json({ message: 'No lands found for this owner.' });
+        }
+
+        // إعادة عرض الأراضي مع التفاصيل المطلوبة فقط (مثل اسم الأرض، الموقع، إلخ)
+        const landDetails = lands.map(land => ({
+            landName: land.name,    // اسم الأرض
+            location: land.location, // الموقع
+            landLink: land.link     // رابط الموقع (يمكن تعديل ذلك بناءً على هيكل بياناتك)
+        }));
+
+        return res.status(200).json({ lands: landDetails });
+
+    } catch (err) {
+        console.error('Error while processing the request:', err);
+        return res.status(500).json({ message: 'An error occurred while fetching lands.' });
+    }
+};
+
+const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+        user: 'tasbeehsa80@gmail.com', // بريدك الإلكتروني
+        pass: 'yeaf tcnf prlj kzlj'    // كلمة المرور أو كلمة مرور التطبيق
+    }
+});
+cron.schedule('*/1 * * * *', async () => {
+    console.log('Running automatic advertisement check...');
+    try {
+        // العثور على الأراضي التي تحتاج إلى إعلان
+        const landsToAdvertise = await Land.find({ isguarntee: 'false', advertisement: 'false' });
+
+        if (landsToAdvertise.length === 0) {
+            console.log('No lands to advertise. All lands are already advertisednormallly.');
+            return;
+        }
+
+        for (const land of landsToAdvertise) {
+            // التحقق من وجود الحقل location
+            if (!land.location || !land.location.latitude || !land.location.longitude) {
+                console.log(`Land with ID ${land._id} is missing location data. Skipping...`);
+                continue; // تجاوز الأرض التي تفتقد الحقل location
+            }
+            if (land.isguarntee) {
+                console.log(`Land with ID ${land._id} is guaranteed. Skipping...`);
+                continue; // إذا كانت الأرض مضمونة، لا يتم الإعلان عنها
+            }
+
+            // التحقق إذا مرت أكثر من 5 دقائق على إنشائها
+            const currentTime = new Date();
+            const creationTime = new Date(land.creationDate); // assuming `creationDate` exists
+            const elapsedTime = (currentTime - creationTime) / 1000 / 60; // الزمن بالدقائق
+            if (elapsedTime < 5) {
+                console.log(`Land with ID ${land._id} has not passed 5 minutes since creation. Skipping...`);
+                continue; // إذا لم تمر 5 دقائق على إنشاء الأرض
+            }
+
+            // العثور على صاحب الأرض بناءً على معرّف المالك
+            const owner = await Owner.findById(land.ownerId);
+            if (!owner) {
+                console.log(`Owner not found for land with ID ${land._id}. Skipping email.`);
+                continue; // إذا لم يتم العثور على المالك
+            }
+
+           // حساب عدد العمال بناءً على نوع العمل والمساحة
+let workersPerArea = 0;
+switch (land.workType) {
+    case 'زراعة':
+        workersPerArea = 1 / 50; // 1 عامل لكل 50 متر مربع
+        break;
+    case 'فلاحة':
+        workersPerArea = 1 / 60; // 1 عامل لكل 60 متر مربع
+        break;
+    case 'تشجير':
+        workersPerArea = 1 / 70; // 1 عامل لكل 70 متر مربع
+        break;
+    case 'تلقيط':
+        workersPerArea = 1 / 30; // 1 عامل لكل 30 متر مربع
+        break;
+    case 'حصاد':
+        workersPerArea = 1 / 40; // 1 عامل لكل 40 متر مربع
+        break;
+    case 'حراثة':
+        workersPerArea = 1 / 100; // 1 عامل لكل 100 متر مربع
+        break;
+    case 'تسميد':
+        workersPerArea = 1 / 100; // 1 عامل لكل 100 متر مربع
+        break;
+    case 'رش مبيدات حشرية':
+        workersPerArea = 1 / 50; // 1 عامل لكل 50 متر مربع
+        break;
+    case 'اعداد بيوت بلاستيكية':
+        workersPerArea = 1 / 20; // 1 عامل لكل 20 متر مربع
+        break;
+    case 'نقل محاصيل':
+        workersPerArea = 1 / 40; // 1 عامل لكل 40 متر مربع
+        break;
+    default:
+        return res.status(400).json({ message: 'Invalid work type.' });
+}
+
+// حساب عدد العمال بناءً على المساحة
+const numberOfWorkers = Math.max(1, Math.ceil(land.area * workersPerArea)); // لا يجب أن يكون العدد أقل من 1
+
+
+            // تحديد تواريخ العمل والأجرة اليومية
+            const suggestedStartDate = new Date();
+            suggestedStartDate.setDate(suggestedStartDate.getDate() + 2); // بدء العمل بعد يومين (اقتراح)
+            const suggestedEndDate = new Date(suggestedStartDate);
+            suggestedEndDate.setDate(suggestedStartDate.getDate() + 5); // الانتهاء بعد 5 أيام من بدء العمل
+
+            const dailyRate = land.workType === 'زراعة' ? 50 : land.workType === 'Construction' ? 80 : 60; // تحديد الأجرة اليومية بناءً على نوع العمل
+
+            // تحديد ساعات العمل بناءً على نوع العمل
+            const workHours = {
+                'زراعة': { start: '7:00 AM', end: '3:00 PM' },   // ساعات العمل للزراعة
+                'Construction': { start: '8:00 AM', end: '6:00 PM' },  // ساعات العمل للبناء
+                'Maintenance': { start: '9:00 AM', end: '5:00 PM' },   // ساعات العمل للصيانة
+            };
+
+            const suggestedWorkHours = workHours[land.workType] || { start: '8:00 AM', end: '4:00 PM' }; // إذا لم يكن النوع موجودًا، اختر 8 AM - 4 PM
+
+            // صيغة الاقتراح لإرسالها عبر البريد
+            const proposalText = `
+                مرحبًا ${owner.email} ،\n\n
+                نحن نقترح إعلانًا للعمل على الأرض الخاصة بك.\n
+                نوع العمل: ${land.workType}\n
+                عدد العمال المقترح: ${numberOfWorkers} عامل\n
+                تاريخ بدء العمل: ${suggestedStartDate.toDateString()}\n
+                تاريخ انتهاء العمل: ${suggestedEndDate.toDateString()}\n
+                الأجرة اليومية المقترحة: ${dailyRate} دولار\n
+                ساعات العمل المقترحة: من ${suggestedWorkHours.start} إلى ${suggestedWorkHours.end}\n\n
+                يرجى مراجعة الاقتراح وإعلامنا إذا كنت توافق أو ترغب في إجراء تعديلات.\n
+                إذا كنت ترغب في قبول الاقتراح، يمكننا المتابعة لإتمام العملية.\n\n
+                شكرًا لك.\n
+                فريق إدارة الأراضي
+            `;
+
+            // إعدادات البريد الإلكتروني
+            const mailOptions = {
+                from: 'tasbeehsa80@gmail.com',
+                to: owner.email,              // إرسال الإيميل إلى مالك الأرض
+                subject: 'Work Announcement Proposal',
+                text: proposalText
+            };
+
+            // إرسال البريد الإلكتروني
+            transporter.sendMail(mailOptions, (error, info) => {
+                if (error) {
+                    console.log('Error sending email:', error);
+                    return;
+                } else {
+                    console.log('Email sent: ' + info.response);
+                }
+            });
+        }
+    } catch (error) {
+        console.error('Error in automatic advertisement:', error);
+    }
+});
+
+module.exports={createRequest,
+    showLand ,createWorkAnnouncement
+    ,calculateWorkersForLand,getAllLands,
+    getguarntors, addLanddaily,updateLand,
+    deleteLand,addLand,getLandbyid,
+    updateOwnerProfile,getLandAdvertisement}

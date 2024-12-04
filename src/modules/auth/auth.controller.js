@@ -1,12 +1,10 @@
 const express = require('express');
-const mongoose = require('mongoose');
 const multer = require('multer');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken'); 
-const {signupSchema,workerSignupSchema,loginSchema,validateProfileUpdate} = require('../valdition/vald.js');
+const {signupSchema,workerSignupSchema,loginSchema} = require('../valdition/vald.js');
 const {Owner,Worker,Token} = require('../DB/types.js');  // تأكد من أن المسار صحيح
 const JWT_SECRET_KEY = '1234#';  // نفس المفتاح السري الذي ستستخدمه للتحقق من التوكن
-const bodyParser = require('body-parser');
 const nodemailer = require('nodemailer');
 const { Company } = require('../DB/types.js');
 
@@ -122,7 +120,6 @@ const signupowner= async (req, res) => {
         return res.status(500).json({ message: 'Error adding owner' });
     }
 };
-
 const signupWorker = async (req, res) => {
     const allowedSkills = [
         'خبرة في الحراثة', 
@@ -150,13 +147,26 @@ const signupWorker = async (req, res) => {
         'خبرة في شحن المحاصيل'
     ];
 
+    const allowedTools = [
+        'محراث', 
+        'جرار', 
+        'مضخة ري', 
+        'مقص زراعي', 
+        'منشار يدوي', 
+        'معدات رش مبيدات', 
+        'آلة حصاد', 
+        'معدات تسميد', 
+        'مجزّ العشب', 
+        'معدات نقل المحاصيل'
+    ];
+
     const { error } = workerSignupSchema.validate(req.body, { abortEarly: false });
     if (error) {
         const errorMessages = error.details.map(detail => detail.message);
         return res.status(400).json({ message: 'Validation error', errors: errorMessages });
     }
 
-    const { email, password, confirmPassword, userName, skills, contactNumber, isGuarantor } = req.body;
+    const { email, password, confirmPassword, userName, skills, tools, contactNumber, isGuarantor } = req.body;
 
     if (password !== confirmPassword) {
         return res.status(400).json({ message: 'Password and confirm password do not match' });
@@ -173,6 +183,17 @@ const signupWorker = async (req, res) => {
         });
     }
 
+    if (!Array.isArray(tools)) {
+        return res.status(400).json({ message: 'Tools must be an array' });
+    }
+
+    if (!tools.every(tool => allowedTools.includes(tool))) {
+        return res.status(400).json({ 
+            message: 'اختر أدوات لها علاقة بأعمال الأرض',
+            allowedTools
+        });
+    }
+
     try {
         const hashedPassword = await bcrypt.hash(password, 10);
         
@@ -181,15 +202,21 @@ const signupWorker = async (req, res) => {
             password: hashedPassword,  // Use hashed password
             userName,
             skills,
+            tools,
             contactNumber,
             isGuarantor: isGuarantor || false // إذا لم يكن تم اختيارها، تكون القيمة False
+            ,
+            registrationCompleted: false // تعيين حالة التسجيل كغير مكتملة
+
         });
 
-        await newWorker.save();
+        const savedWorker = await newWorker.save();
         console.log("Worker added successfully");
        
-        return res.status(201).json({ message: 'Worker added successfully' });
-
+        return res.status(201).json({
+            message: 'Step 1 completed. Proceed to step 2.',
+            workerId: savedWorker._id
+        });
     } catch (error) {
         console.error("Error adding worker:", {
             errorMessage: error.message,
@@ -207,6 +234,34 @@ const signupWorker = async (req, res) => {
     }
 };
 
+const signupwstep2= async (req, res) => {
+    let { workerId } = req.params;
+    const { streetName, town, city, areas } = req.body;
+
+    try {
+        workerId = workerId.replace(/^:/, '');  // هذه الدالة ستزيل النقطتين في حال كانت في بداية المعرف
+
+        const worker = await Worker.findById(workerId);
+        if (!worker) {
+            return res.status(404).json({ message: 'Worker not found.' });
+        }
+
+        // تحديث بيانات الموقع وحالة التسجيل
+        worker.streetName=  streetName ;
+        worker.town= town ;
+        worker.city=   city ;
+
+        worker.areas = areas;
+        worker.registrationCompleted = true;
+
+        await worker.save();
+
+        return res.status(200).json({ message: 'Registration completed successfully.' });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ message: 'Error updating worker data.' });
+    }
+};
 
 const login = async (req, res) => {
     try {
@@ -682,4 +737,4 @@ const logincompany = async (req, res) => {
 
 module.exports = {verifyResetCode,resetPassword, login, deactivationaccount,
     signupowner,signupWorker,profile,logout,sendconfirm,
-    getconfirm,myprofile,deleteAccount,updatePassword,forgotPassword,logincompany};
+    getconfirm,myprofile,deleteAccount,updatePassword,forgotPassword,logincompany,signupwstep2};

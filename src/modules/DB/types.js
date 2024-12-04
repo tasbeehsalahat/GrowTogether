@@ -1,4 +1,4 @@
-const { optional } = require('joi');
+const { optional, boolean } = require('joi');
 const mongoose = require('mongoose');
 
 const ownerSchema = new mongoose.Schema({
@@ -14,53 +14,119 @@ const ownerSchema = new mongoose.Schema({
 }, { collection: 'Owner' });
 
 const Owner = mongoose.model('Owner', ownerSchema);
+
+
+// قائمة المهارات المسموح بها
 const allowedSkills = [
-    'خبرة في الحراثة', 
-    'خبرة بالآلات الزراعية', 
-    'مزارع', 
-    'خبرة في الزراعة', 
-    'خبرة في زراعة المحاصيل', 
-    'تقني ري', 
-    'خبرة في أنظمة الري', 
-    'عامل حصاد', 
-    'خبرة في جمع المحاصيل', 
-    'خبرة في التسميد', 
-    'تقني تسميد', 
-    'خبير مكافحة آفات', 
-    'خبرة في مكافحة الحشرات', 
-    'خبرة في استخدام المبيدات', 
-    'خبرة في تسوية الأرض', 
-    'متخصص في تجهيز الأراضي', 
-    'عامل إزالة الأعشاب', 
-    'خبرة في المكافحة', 
-    'خبرة في المعدات الزراعية', 
-    'تقني محميات زراعية', 
-    'خبرة في البيوت البلاستيكية', 
-    'عامل نقل', 
+    'خبرة في الحراثة',
+    'خبرة بالآلات الزراعية',
+    'مزارع',
+    'خبرة في الزراعة',
+    'خبرة في زراعة المحاصيل',
+    'تقني ري',
+    'خبرة في أنظمة الري',
+    'عامل حصاد',
+    'خبرة في جمع المحاصيل',
+    'خبرة في التسميد',
+    'تقني تسميد',
+    'خبير مكافحة آفات',
+    'خبرة في مكافحة الحشرات',
+    'خبرة في استخدام المبيدات',
+    'خبرة في تسوية الأرض',
+    'متخصص في تجهيز الأراضي',
+    'عامل إزالة الأعشاب',
+    'خبرة في المكافحة',
+    'خبرة في المعدات الزراعية',
+    'تقني محميات زراعية',
+    'خبرة في البيوت البلاستيكية',
+    'عامل نقل',
     'خبرة في شحن المحاصيل'
 ];
 
-const workerSchema = new mongoose.Schema({
-    email: { type: String, required: true, unique: true, lowercase: true },
-    password: { type: String, required: true },
-    userName: { type: String, required: true },
-    skills: {
-        type: [String],  // تحديد أن المهارات ستكون مصفوفة من نوع String
-        optional,
-        validate: {
-            validator: function (value) {
-                return value.every(skill => allowedSkills.includes(skill));
-            },
-            message: 'بعض المهارات غير صحيحة أو غير مرتبطة بالزراعة.'
+// قائمة الأدوات المسموح بها
+const allowedTools = [
+    'معدات تسميد',
+    'معدات حراثة',
+    'معدات ري',
+    'آلات زراعية',
+    'معدات مكافحة آفات',
+    'معدات حصاد',
+    'معدات نقل'
+];
+
+const workerSchema = new mongoose.Schema(
+    {
+        email: {
+            type: String,
+            required: true,
+            unique: true,
+            lowercase: true
+        },
+        password: {
+            type: String,
+            required: true
+        },
+        userName: {
+            type: String,
+            required: true
+        },
+        skills: {
+            type: [String],
+            validate: {
+                validator: function (value) {
+                    return value.every(skill => allowedSkills.includes(skill));
+                },
+                message: 'بعض المهارات غير صحيحة أو غير مرتبطة بالزراعة.'
+            }
+        },
+        contactNumber: {
+            type: String,
+            required: true
+        },
+        role: {
+            type: String,
+            default: 'Worker'
+        },
+        status: {
+            type: String,
+            default: 'active'
+        },
+        isGuarantor: {
+            type: Boolean,
+            default: false
+        },
+        tools: {
+            type: [String],
+            validate: {
+                validator: function (value) {
+                    return value.every(tool => allowedTools.includes(tool));
+                },
+                message: 'بعض الأدوات غير صحيحة أو غير مرتبطة بالزراعة.'
+            }
+        },
+        // الحقول الجديدة لخطوة التسجيل الثانية
+        streetName: {
+            type: String,
+            required: false // اختياري في حال كان إدخال الموقع يتم في خطوة ثانية
+        },
+        town: {
+            type: String,
+            required: false
+        },
+        city: {
+            type: String,
+            required: false
+        },
+        areas: {
+            type: [String], // قائمة بالمناطق الجغرافية
+            required: false
         }
     },
-    contactNumber: { type: String, required: true },
-    role: { type: String, default: 'Worker' }, // إضافة حقل role
-    Status: { type: String, default: 'active' }, // إضافة حقل status
-    isGuarantor: { type: Boolean, default: false } // إضافة حقل isGuarantor (هل العامل ضامن؟)
-}, { collection: 'Worker' });
+    { collection: 'Worker' }
+);
 
 const Worker = mongoose.model('Worker', workerSchema);
+
 
 const tokenSchema = new mongoose.Schema({
     email: { type: String, required: true, unique: true }, // البريد الإلكتروني للمستخدم
@@ -122,7 +188,7 @@ optional,
     workType: {
         type: String,
         required: true,
-        enum: ['زراعة', 'فلاحة', 'تشجير', 'تلقيط', 'حصاد'], // الخيارات المتاحة لنوع العمل
+        enum: ['زراعة', 'فلاحة', 'تشجير', 'تلقيط', 'حصاد','حراثة','تسميد','رش مبيدات حشرية','اعداد بيوت بلاستيكية','نقل محاصيل'], // الخيارات المتاحة لنوع العمل
     },
     guaranteePrice: {
         type: Number, // السعر الذي يطلبه المالك كضمان (قد يكون مطلوبًا لنوع عمل معين)
@@ -136,11 +202,8 @@ optional,
         type: Number, // نسبة الضمان (قد يكون مطلوبًا لنوع عمل معين)
         default: null,
     },
-    status: {
-        type: String,
-        enum: ['Accepted', 'Pending', 'Rejected'], // حالات الأرض
-        default: 'Pending',
-    },
+    isguarntee:  { type: Boolean, default: false }
+    ,
     formattedAddress: {
         type: String, // العنوان المترجم (المستخرج من API)
         required: false,
@@ -153,6 +216,16 @@ optional,
         type: Date,
         default: Date.now, // يتم تعيين تاريخ الإضافة تلقائيًا
     },
+    advertisement:{ type: Boolean, default: false },
+    status:{ type: Boolean, default: false },
+    location: {
+        type: {
+            latitude: { type: Number, required: true }, // خط العرض
+            longitude: { type: Number, required: true }, // خط الطول
+        },
+        required: true, // تأكد من وجود الموقع دائمًا
+    },
+
 });
 
 const Land = mongoose.model('Land', landSchema);
@@ -208,7 +281,9 @@ const Work = new mongoose.Schema({
     status: { 
         type: String, 
         default: 'Available' 
-    },
+    },  
+      isGuarantor: { type: Boolean, default: false } // إضافة حقل isGuarantor (هل العامل ضامن؟)
+
 });
 
 const works = mongoose.model('Works', Work);
@@ -235,9 +310,6 @@ const works = mongoose.model('Works', Work);
 
 const Company = mongoose.model('Company', companySchema);
 
-
-
-// Define work type schema
 const workSchema = new mongoose.Schema({
   type: {
     type: String,  // Type of work (e.g., Plowing, Planting, etc.)
@@ -260,8 +332,6 @@ const workSchema = new mongoose.Schema({
     default: Date.now,
   },
 });
-
-// Define the Work model
 const Work_analysis = mongoose.model('e', workSchema);
 
 const keywordsSchema = new mongoose.Schema({
@@ -270,8 +340,81 @@ const keywordsSchema = new mongoose.Schema({
     tools: [String]   // قائمة الأدوات
 });
 
-// إنشاء نموذج MongoDB
 const Keywords = mongoose.model('Keywords', keywordsSchema);
 
+// سكيما إعلان العمل
+const workAnnouncementSchema = new mongoose.Schema({
+    landid: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Land',
+        required: true, // الإشارة إلى الأرض التي يتم الإعلان عنها
+    },
+    numberOfWorkers: {
+        type: Number,
+        required: true, // عدد العمال المطلوبين
+    },
+    startTime: {
+        type: String,
+        required: true, // وقت بداية العمل
+    },
+    endTime: {
+        type: String,
+        required: true, // وقت انتهاء العمل
+    },
+    startDate: {
+        type: Date,
+        required: true, // تاريخ بداية العمل
+    },
+    endDate: {
+        type: Date,
+        required: true, // تاريخ نهاية العمل
+    },
+    dailyRate: {
+        type: Number,
+        required: true, // الأجرة اليومية لكل عامل
+    },
+    workType: {
+        type: String,
+        required: true, // نوع العمل (مأخوذ من الأرض)
+    },
+    location: {
+        latitude: {
+            type: Number,
+            required: true, // خط العرض
+        },
+        longitude: {
+            type: Number,
+            required: true, // خط الطول
+        },
+    },
+    formattedAddress: {
+        type: String,
+        required: true, // العنوان الكامل
+    },
+    googleMapsLink: {
+        type: String,
+        required: true, // رابط جوجل ماب للموقع
+    },
+    createdAt: {
+        type: Date,
+        default: Date.now, // تاريخ إنشاء الإعلان
+    },
+});
 
-module.exports ={Owner,Worker,Token,Land,works,Company,Work_analysis,Keywords,keywordsSchema};
+// إنشاء الموديل بناءً على السكيما
+const WorkAnnouncement = mongoose.model('WorkAnnouncement', workAnnouncementSchema);
+
+const RequestSchema = new mongoose.Schema({
+    landId: { type: mongoose.Schema.Types.ObjectId, ref: 'Land', required: true },
+    workerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Worker', required: true },
+    ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Owner', required: true },
+    status: { type: String, enum: ['Pending', 'Accepted', 'Rejected'], default: 'Pending' },
+    createdAt: { type: Date, default: Date.now },
+   owneremail: { type: String, required: true },
+
+});
+
+const requests = mongoose.model('Request', RequestSchema);
+
+
+module.exports ={requests,WorkAnnouncement,Owner,Worker,Token,Land,works,Company,Work_analysis,Keywords,keywordsSchema};

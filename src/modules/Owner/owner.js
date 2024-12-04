@@ -4,7 +4,9 @@ const multer = require('multer');
 const router = express.Router();
 
 const {authenticateJWT}=require('../middleware/middleware.js');
-const { addLand, getAllLands,updateLand, deleteLand, getLandbyid, updateOwnerProfile } = require('./owner.controller.js');
+const { addLand, getAllLands,updateLand, deleteLand, getLandbyid, updateOwnerProfile, 
+    getLandAdvertisement, addLanddaily, getguarntors, calculateWorkersForLand,
+     createWorkAnnouncement, showLand, createRequest } = require('./owner.controller.js');
 router.get('/getmylands',authenticateJWT,getAllLands);
 router.patch('/updatemyland/:landId',authenticateJWT,updateLand);
 router.delete('/deletemylands/:landid',authenticateJWT,deleteLand);
@@ -26,6 +28,13 @@ router.post('/open', (req, res) => {
         googleMapsUrl,
     });
 });
-router.post('/addland',authenticateJWT,addLand)
+router.post('/addlandgurantee',authenticateJWT,addLand);
+router.get('/advertismentland',  getLandAdvertisement);
+router.post('/addlanddaily',authenticateJWT,addLanddaily);
+router.get('/getguarntors/:landid', authenticateJWT, getguarntors);
+router.get('/calculateworkers/:landid', authenticateJWT, calculateWorkersForLand);
+router.post('/create-work-announcement/:landid',authenticateJWT,createWorkAnnouncement);
+router.get('/showlands',authenticateJWT,showLand);
+router.get('/request/:landId/:workerId',authenticateJWT,createRequest);
 
 module.exports = router;

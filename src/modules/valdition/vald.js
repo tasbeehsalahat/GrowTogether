@@ -59,6 +59,18 @@ const allowedSkills = [
     'خبرة في البيوت البلاستيكية', 
     'عامل نقل', 
     'خبرة في شحن المحاصيل'
+]; 
+const allowedTools = [
+    'محراث', 
+    'جرار', 
+    'مضخة ري', 
+    'مقص زراعي', 
+    'منشار يدوي', 
+    'معدات رش مبيدات', 
+    'آلة حصاد', 
+    'معدات تسميد', 
+    'مجزّ العشب', 
+    'معدات نقل المحاصيل'
 ];
 const workerSignupSchema = Joi.object({
     email: Joi.string().email().required().messages({
@@ -89,7 +101,15 @@ const workerSignupSchema = Joi.object({
         'array.min': `"Skills" must include at least one skill`,
         'any.required': `"Skills" is a required field`
     }),
-    
+tools: Joi.array().items(
+    Joi.string().valid(...allowedTools).required().messages({
+        'any.only': `"tool" must be one of the allowed tools`,
+        'any.required': `"tool" is required`
+    })
+).min(1).required().messages({
+    'array.min': `"tools" must include at least one skill`,
+    'any.required': `"tools" is a required field`
+}),
     contactNumber: Joi.string().pattern(/^[0-9]{10,15}$/).required().messages({
         'string.empty': `"Contact Number" cannot be empty`,
         'string.pattern.base': `"Contact Number" should contain only numbers and be between 10 and 15 digits`,

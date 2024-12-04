@@ -1,11 +1,26 @@
+
+const express = require('express');
 const router = express.Router();
 
 const {authenticateJWT}=require('../middleware/middleware.js');
-const { updateWorkerProfile, showLand } = require('./worker.controller.js');
+const { updateWorkerProfile,  announce, getLands, weathernotification, notification, respondToRequest } = require('./worker.controller.js');
+const nodemailer = require('nodemailer');
 
+const multer = require('multer');
+const axios = require("axios");
+const {Owner,Worker,Token,Land,works} = require('../DB/types.js');  // تأكد من أن المسار صحيح
+const JWT_SECRET_KEY = '1234#';  // نفس المفتاح السري الذي ستستخدمه للتحقق من التوكن
+const jwt = require('jsonwebtoken'); 
+const API_KEY = '6d12351278a6e0f3a7bdd70bd2ddbd24'; // تخزين المفتاح مباشرة
 
-
-
+router.post('/announcee',authenticateJWT,announce);
 
 router.patch('/update/:email',authenticateJWT,updateWorkerProfile);
-router.get('/showlands',authenticateJWT,showLand);
+router.get('/showLands',getLands);
+
+// الراوتر لاستقبال التوكن وإرسال إشعار الطقس عبر البريد الإلكتروني
+router.post('/weather-notification',weathernotification);
+router.get('/notification',authenticateJWT,notification);
+router.get('/respondToRequest/:requestId/:status',authenticateJWT,respondToRequest);
+
+module.exports = router;
