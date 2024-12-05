@@ -699,7 +699,7 @@ const getguarntors = async (req, res) => {
         let workers;
 if(isguarntee){
           // أولاً: البحث باستخدام اسم الشارع
-          workers = await Worker.find({
+          workers = await works.find({
             areas: { $regex: streetName, $options: 'i' },
             isGuarantor: true, // إضافة الشرط مباشرة
 
@@ -707,7 +707,7 @@ if(isguarntee){
 
         // ثانياً: إذا لم يتم العثور على عمال، البحث باستخدام اسم البلدة
         if (workers.length === 0) {
-            workers = await Worker.find({
+            workers = await works.find({
                 areas: { $regex: town, $options: 'i' },
                 isGuarantor: true, // إضافة الشرط مباشرة
 
@@ -716,7 +716,7 @@ if(isguarntee){
 
         // ثالثاً: إذا لم يتم العثور على عمال، البحث باستخدام اسم المدينة
         if (workers.length === 0) {
-            workers = await Worker.find({
+            workers = await Works.find({
                 areas: { $regex: city, $options: 'i' },
                 isGuarantor: true, // إضافة الشرط مباشرة
 
@@ -725,7 +725,7 @@ if(isguarntee){
 
         // رابعاً: إذا لم يتم العثور على عمال، البحث باستخدام عدة شروط (الشارع، البلدة، المدينة)
         if (workers.length === 0) {
-            workers = await Worker.find({
+            workers = await Works.find({
                 $or: [
                     { areas: { $regex: streetName, $options: 'i' } },
                     { areas: { $regex: town, $options: 'i' } },
@@ -750,21 +750,21 @@ if(isguarntee){
 
         // ثانياً: إذا لم يتم العثور على عمال، البحث باستخدام اسم البلدة
         if (workers.length === 0) {
-            workers = await Worker.find({
+            workers = await works.find({
                 areas: { $regex: town, $options: 'i' }
             });
         }
 
         // ثالثاً: إذا لم يتم العثور على عمال، البحث باستخدام اسم المدينة
         if (workers.length === 0) {
-            workers = await Worker.find({
+            workers = await works.find({
                 areas: { $regex: city, $options: 'i' }
             });
         }
 
         // رابعاً: إذا لم يتم العثور على عمال، البحث باستخدام عدة شروط (الشارع، البلدة، المدينة)
         if (workers.length === 0) {
-            workers = await Worker.find({
+            workers = await works.find({
                 $or: [
                     { areas: { $regex: streetName, $options: 'i' } },
                     { areas: { $regex: town, $options: 'i' } },
@@ -798,6 +798,10 @@ const createRequest = async (req, res) => {
         const decodedToken = jwt.verify(token, JWT_SECRET_KEY);
         const { email, role } = decodedToken;
 
+        if (!email) {
+            return res.status(400).json({ message: 'Owner email is missing in the token.' });
+        }
+
         if (role !== 'Owner') {
             return res.status(403).json({ message: 'Access denied. Only Owners can send requests.' });
         }
@@ -808,21 +812,25 @@ const createRequest = async (req, res) => {
             return res.status(404).json({ message: 'Owner not found.' });
         }
 
-        // استخراج landId و workerId من الرابط
-        let { landId, workerId } = req.params;
-        landId= landId.replace(/^:/, '');  // هذه الدالة ستزيل النقطتين في حال كانت في بداية المعرف
-        workerId = workerId.replace(/^:/, '');  // هذه الدالة ستزيل النقطتين في حال كانت في بداية المعرف
-        console.log(`Land ID: ${landId}, Worker ID: ${workerId}`);
+        // استخراج landId و workerEmail من الرابط
+        let { landId, workerEmail } = req.params;
+        landId = landId.replace(/^:/, ''); // إزالة النقطتين في بداية المعرف
+        workerEmail = workerEmail.replace(/^:/, ''); // إزالة النقطتين في بداية البريد الإلكتروني
 
-        if (!landId || !workerId) {
-            return res.status(400).json({ message: 'Land ID and Worker ID are required in the URL.' });
+        console.log(`Land ID: ${landId}, Worker Email: ${workerEmail}`);
+
+        if (!landId || !workerEmail) {
+            return res.status(400).json({ message: 'Land ID and Worker Email are required in the URL.' });
         }
 
-        const land = await Land.findOne({ _id: landId, ownerId: owner._id });
+        // التحقق من الأرض
+        const land = await Land.findOne({ _id: landId, ownerEmail: email });
         if (!land) {
             return res.status(404).json({ message: 'Land not found or does not belong to the owner.' });
         }
-        const worker = await Worker.findById(workerId);
+
+        // التحقق من العامل
+        const worker = await works.findOne({ email: workerEmail });
         if (!worker) {
             return res.status(404).json({ message: 'Worker not found.' });
         }
@@ -830,9 +838,11 @@ const createRequest = async (req, res) => {
         // إنشاء الطلب
         const newRequest = new requests({
             landId,
-            workerId,
+            workerEmail, // حفظ الإيميل الخاص بالعامل
             ownerId: owner._id,
-owneremail:email        });
+            owneremail: email, // تعيين الإيميل الخاص بالمالك
+            status: 'Pending'
+        });
 
         await newRequest.save();
 
@@ -842,9 +852,10 @@ owneremail:email        });
             request: {
                 _id: newRequest._id,
                 landId: newRequest.landId,
-                workerId: newRequest.workerId,
+                workerEmail: newRequest.workerEmail, // الإيميل الخاص بالعامل
                 ownerId: newRequest.ownerId,
-                status:'Pending'
+                owneremail: newRequest.owneremail, // الإيميل الخاص بالمالك
+                status: 'Pending',
             },
         });
     } catch (error) {
@@ -1209,8 +1220,12 @@ const numberOfWorkers = Math.max(1, Math.ceil(land.area * workersPerArea)); // �
         console.error('Error in automatic advertisement:', error);
     }
 });
+const pending=async (req,res)=>{
 
-module.exports={createRequest,
+}
+
+
+module.exports={createRequest,pending,
     showLand ,createWorkAnnouncement
     ,calculateWorkersForLand,getAllLands,
     getguarntors, addLanddaily,updateLand,

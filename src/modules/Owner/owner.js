@@ -35,6 +35,6 @@ router.get('/getguarntors/:landid', authenticateJWT, getguarntors);
 router.get('/calculateworkers/:landid', authenticateJWT, calculateWorkersForLand);
 router.post('/create-work-announcement/:landid',authenticateJWT,createWorkAnnouncement);
 router.get('/showlands',authenticateJWT,showLand);
-router.get('/request/:landId/:workerId',authenticateJWT,createRequest);
+router.get('/request/:landId/:workerEmail',authenticateJWT,createRequest);
 
 module.exports = router;

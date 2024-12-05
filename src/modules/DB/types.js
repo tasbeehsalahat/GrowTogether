@@ -311,27 +311,27 @@ const works = mongoose.model('Works', Work);
 const Company = mongoose.model('Company', companySchema);
 
 const workSchema = new mongoose.Schema({
-  type: {
-    type: String,  // Type of work (e.g., Plowing, Planting, etc.)
-    required: true,
-  },
-  skills: {
-    type: [String],  // List of skills needed for the work
-    required: true,
-  },
-  tools: {
-    type: [String],  // List of tools required for the work
-    required: true,
-  },
-  requiredByOwner: {
-    type: Boolean,  // Indicating whether the work is required by land owner
-    required: true,
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now,
-  },
+    workerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Worker', required: true }, // الربط مع جدول العمال
+    skills: [String],
+    tools: [String],
+    availableDays: [String],
+    hourlyRate: Number,
+    areas: [String],
+    location: {
+        latitude: Number,
+        longitude: Number
+    },
+    coordinates: {
+        lat: Number,
+        lng: Number
+    },
+
+    formattedAddress: String,
+    email: String,
+    contactNumber: String,
+    isGuarantor: Boolean,
 });
+
 const Work_analysis = mongoose.model('e', workSchema);
 
 const keywordsSchema = new mongoose.Schema({
@@ -404,13 +404,14 @@ const workAnnouncementSchema = new mongoose.Schema({
 // إنشاء الموديل بناءً على السكيما
 const WorkAnnouncement = mongoose.model('WorkAnnouncement', workAnnouncementSchema);
 
-const RequestSchema = new mongoose.Schema({
+
+const RequestSchema= new mongoose.Schema({
     landId: { type: mongoose.Schema.Types.ObjectId, ref: 'Land', required: true },
-    workerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Worker', required: true },
+    workerEmail: { type: String, required: true }, // Ensure this is marked as required
     ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Owner', required: true },
+    owneremail: { type: String, required: true },
     status: { type: String, enum: ['Pending', 'Accepted', 'Rejected'], default: 'Pending' },
-    createdAt: { type: Date, default: Date.now },
-   owneremail: { type: String, required: true },
+    createdAt: { type: Date, default: Date.now }, // تاريخ الإنشاء
 
 });
 

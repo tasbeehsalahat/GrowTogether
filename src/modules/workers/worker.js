@@ -3,7 +3,10 @@ const express = require('express');
 const router = express.Router();
 
 const {authenticateJWT}=require('../middleware/middleware.js');
-const { updateWorkerProfile,  announce, getLands, weathernotification, notification, respondToRequest } = require('./worker.controller.js');
+const { updateWorkerProfile,  announce, getLands, 
+    weathernotification, notification, 
+    getAllAnnouncements,respondToRequest, 
+    joinland} = require('./worker.controller.js');
 const nodemailer = require('nodemailer');
 
 const multer = require('multer');
@@ -22,5 +25,6 @@ router.get('/showLands',getLands);
 router.post('/weather-notification',weathernotification);
 router.get('/notification',authenticateJWT,notification);
 router.get('/respondToRequest/:requestId/:status',authenticateJWT,respondToRequest);
-
+router.get('/announcement',getAllAnnouncements );
+router.post('/join-land/:landid',authenticateJWT,joinland);
 module.exports = router;

@@ -4,10 +4,9 @@ const express = require('express');const mongoose = require('mongoose');
 const multer = require('multer');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken'); 
-const { API_KEY } = require('dotenv'); // تأكد من أنك قد خزنت مفتاح API في ملف config.js أو مباشرًا في الكود.
 const nodemailer = require('nodemailer');
 
-const {Owner,Worker,Token,Land,works,requests} = require('../DB/types.js');  // تأكد من أن المسار صحيح
+const {Owner,Worker,Token,Land,works,requests,workAnnouncements} = require('../DB/types.js');  // تأكد من أن المسار صحيح
 const JWT_SECRET_KEY = '1234#';  // نفس المفتاح السري الذي ستستخدمه للتحقق من التوكن
 const updateWorkerProfile = async (req, res) => {
     try {
@@ -62,7 +61,6 @@ const announce = async (req, res) => {
 
         let decodedToken;
         try {
-            // تحقق من صحة التوكن باستخدام verify
             decodedToken = jwt.verify(token, JWT_SECRET_KEY);
         } catch (err) {
             if (err.name === 'TokenExpiredError') {
@@ -74,29 +72,28 @@ const announce = async (req, res) => {
             return res.status(401).json({ message: 'Authentication failed. Please login again.' });
         }
 
-        // استخراج البريد الإلكتروني من الـ decoded token
         const { email, role } = decodedToken;
 
-        // تحقق من صلاحية الدور
+        // تحقق من الدور
         if (role !== "Worker") {
             return res.status(403).json({ message: "Access denied. Only Workers can announce jobs." });
         }
 
-        // البحث عن العامل في قاعدة البيانات باستخدام البريد الإلكتروني
+        // البحث عن العامل باستخدام البريد الإلكتروني
         const worker = await Worker.findOne({ email });
         if (!worker) {
             return res.status(404).json({ message: "Worker not found." });
         }
 
-        // استخراج التفاصيل من العامل
-        const { skills, contactNumber, tools, isGuarantor, street, city, town,areas } = worker;
+        // استخراج البيانات من العامل
+        const { _id, skills, contactNumber, tools, isGuarantor, street, city, town, areas } = worker;
 
-        // استلام تفاصيل العمل من الطلب
-        const { availableDays, hourlyRate} = req.body;
+        // بيانات العمل من الطلب
+        const { availableDays, hourlyRate } = req.body;
 
-        // تجميع العنوان من بيانات العامل
+        // تجميع العنوان
         const address = `${street}, ${city}, ${town}, palestine`;
-        const apiKey = "AlzaSy6XpmiefdiJmjZyZJVslxex6jWWjzxkmrn"; // API key here
+        const apiKey = "AlzaSy6XpmiefdiJmjZyZJVslxex6jWWjzxkmrn"; // مفتاح API
         const geocodeUrl = `https://maps.gomaps.pro/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${apiKey}`;
         const response = await axios.get(geocodeUrl);
 
@@ -106,15 +103,15 @@ const announce = async (req, res) => {
 
         const { lat, lng } = response.data.results[0].geometry.location;
         const formattedAddress = response.data.results[0].formatted_address;
-        const googleMapsLink = `https://www.google.com/maps?q=${lat},${lng}`;
 
-        // بناء مستند عمل جديد
+        // إنشاء مستند جديد للعمل
         const newWork = new works({
-            skills, // إضافة المهارات التي تم استرجاعها من العامل
-            tools, // إضافة الأدوات التي تم استرجاعها من العامل
-            availableDays, // إضافة الأيام المتاحة التي يتم استلامها من الطلب
-            hourlyRate, // إضافة الأجرة التي تم استلامها من الطلب
-            areas, // إضافة المناطق من الطلب
+            workerId: _id, // تخزين _id الخاص بالعامل
+            skills,
+            tools,
+            availableDays,
+            hourlyRate,
+            areas,
             location: {
                 latitude: lat,
                 longitude: lng
@@ -124,9 +121,9 @@ const announce = async (req, res) => {
                 lng
             },
             formattedAddress,
-            email, // تخزين الايميل من التوكن
-            contactNumber, // تخزين رقم الهاتف من قاعدة البيانات
-            isGuarantor, // تخزين حالة التحقق من العامل
+            email,
+            contactNumber,
+            isGuarantor,
         });
 
         // حفظ المستند في قاعدة البيانات
@@ -135,101 +132,153 @@ const announce = async (req, res) => {
         res.status(201).json({
             message: 'Work announcement created successfully.',
             work: newWork,
-            googleMapsLink
+            googleMapsLink: `https://www.google.com/maps?q=${lat},${lng}`
         });
     } catch (error) {
         console.error('Error in adding the announcement:', error);
         res.status(500).json({ message: 'Server error occurred.' });
     }
 };
+
 const getLands = async (req, res) => {
     try {
-        // تحقق من وجود التوكن في الهيدر
-        const token = req.headers['authorization'];
+        const token = req.header('authorization'); // استخراج التوكن من الهيدر
 
         if (!token) {
-            return res.status(401).json({ message: 'Token is required.' });
+            return res.status(401).json({ message: 'Authentication token is required.' });
         }
 
-        // التحقق من صحة التوكن (هنا يجب استخدام مكتبة للتحقق من التوكن مثل JWT)
-        const user = verifyToken(token); // استخدم دالة للتحقق من صحة التوكن
-        
-        if (!user) {
-            return res.status(401).json({ message: 'Invalid token.' });
+        const decodedToken = jwt.verify(token, JWT_SECRET_KEY); // فك تشفير التوكن
+        const { email, role } = decodedToken;
+
+        if (role !== 'Worker') {
+            return res.status(403).json({ message: 'Access denied. Only Workers can access this data.' });
         }
 
-        // استخراج الفلتر من الكويري
-        const { isguarntee, location } = req.query; // استخرج الموقع مع الفلتر
-        
-        // إنشاء كائن شرط البحث
-        const query = {};
+        // العثور على العامل بناءً على الإيميل
+        const worker = await Worker.findOne({ email });
 
-        // التحقق من حالة ضمان الأرض بناءً على حالة المستخدم
-        if (isguarntee === 'true') {
-            query.isguarntee = true; // فقط الأراضي المضمونة
-        } else if (isguarntee === 'false') {
-            query.isguarntee = false; // فقط الأراضي غير المضمونة
+        if (!worker) {
+            return res.status(404).json({ message: 'Worker not found.' });
         }
 
-        // إضافة فلتر الموقع (يتم هنا افتراض أن "location" هو موقع العامل)
-        if (location) {
-            // حدد الموقع المناسب للأرض (شارع، بلدة، مدينة، أو أي موقع آخر)
-            query.location = location;
+        // استخراج معرف المنطقة (الشارع، البلدة، المدينة)
+        const { streetName, town, city } = worker;
+
+        if (!streetName && !town && !city) {
+            return res.status(400).json({ message: 'Worker location data is incomplete.' });
         }
 
-        // العثور على الأراضي بناءً على الفلتر
-        const lands = await Land.find(query);
+        let lands;
 
-        // إذا كانت الأراضي فارغة
-        if (lands.length === 0) {
-            return res.status(404).json({ message: 'No lands found matching the criteria.' });
-        }
-
-        // تصفية الأراضي حسب الموقع
-        const filteredLands = lands.filter(land => {
-            // هنا نحتاج إلى منطق لحساب المسافة بين موقع العامل وموقع الأرض
-            // يمكن استخدام حزمة مثل "geolib" لحساب المسافات إذا كان لدينا إحداثيات جغرافية
-            return isLandNearby(land, user.location);
+        // التحقق إذا كانت الأرض ضمان أو إعلان
+        const landsWithGuarantee = await Land.find({
+            $or: [
+                { streetName: { $regex: streetName, $options: 'i' } },
+                { town: { $regex: town, $options: 'i' } },
+                { city: { $regex: city, $options: 'i' } }
+            ],
+            isguarntee: true
         });
 
-        // إذا لم توجد أراضٍ قريبة
-        if (filteredLands.length === 0) {
-            return res.status(404).json({ message: 'No nearby lands found matching the criteria.' });
+        if (landsWithGuarantee.length > 0) {
+            // إذا كانت الأرض ضمان، إرجاع الأراضي التي تملك ضمان
+            return res.status(200).json({
+                message: 'Lands with guarantee found.',
+                lands: landsWithGuarantee
+            });
         }
 
-        // إرجاع الأراضي المتوافقة
-        return res.status(200).json(filteredLands);
+        // إذا لم تكن هناك أراضي ضمان، فابحث في إعلانات العمل
+        const workAnnouncements = await workAnnouncements.find({
+            $or: [
+                { location: { $regex: streetName, $options: 'i' } },
+                { location: { $regex: town, $options: 'i' } },
+                { location: { $regex: city, $options: 'i' } }
+            ]
+        });
+
+        // إذا كانت هناك إعلانات عمل
+        if (workAnnouncements.length > 0) {
+            return res.status(200).json({
+                message: 'Work announcements found.',
+                announcements: workAnnouncements
+            });
+        }
+
+        // إذا لم يتم العثور على أي نتائج
+        return res.status(404).json({ message: 'No lands or work announcements found for this worker.' });
+
     } catch (error) {
-        console.error('Error retrieving lands:', error);
+        console.error('Error retrieving lands or work announcements:', error);
+        return res.status(500).json({ message: 'Server error occurred.' });
+    }
+};
+const joinland=async (req, res) => {
+    try {
+        const token = req.header('authorization');
+        if (!token) {
+            return res.status(401).json({ message: 'Authentication token is required.' });
+        }
+
+        const decodedToken = jwt.verify(token, JWT_SECRET_KEY);
+        const { email, role } = decodedToken;
+
+        // التأكد من أن المستخدم هو عامل
+        if (role !== 'Worker') {
+            return res.status(403).json({ message: 'Access denied. Only workers can request to join land.' });
+        }
+
+        // العثور على العامل بناءً على الإيميل
+        const worker = await Worker.findOne({ email });
+        if (!worker) {
+            return res.status(404).json({ message: 'Worker not found.' });
+        }
+
+        // استخراج معرف الأرض من params
+        const { landid } = req.params;
+
+        // التأكد من أن الـ landid هو ObjectId صالح
+        if (!mongoose.Types.ObjectId.isValid(landid)) {
+            return res.status(400).json({ message: 'Invalid land ID.' });
+        }
+
+        // العثور على الأرض
+        const land = await Land.findById(landid);
+        if (!land) {
+            return res.status(404).json({ message: 'Land not found.' });
+        }
+
+        // التحقق إذا كان العامل قد قدم طلبًا سابقًا لهذا الأرض
+        const existingRequest = await requests.findOne({ workerId: worker._id, landId: land._id });
+        if (existingRequest) {
+            return res.status(400).json({ message: 'You have already requested to join this land.' });
+        }
+
+        // إنشاء الطلب
+        const request = new requests({
+            workerId: worker._id,
+            landId: land._id,
+            workerEmail: worker.email,
+            ownerId: land.ownerId,
+            owneremail: land.ownerEmail,
+            status: 'Pending'
+        });
+
+        // حفظ الطلب في قاعدة البيانات
+        await request.save();
+
+        return res.status(201).json({
+            message: 'Request to join the land has been submitted successfully.',
+            request: request
+        });
+
+    } catch (error) {
+        console.error('Error processing the join request:', error);
         return res.status(500).json({ message: 'Server error occurred.' });
     }
 };
 
-// دالة للتحقق من صحة التوكن
-const verifyToken = (token) => {
-    // من المفترض أن تستخدم مكتبة للتحقق من التوكن هنا (مثل JWT)
-    try {
-        return jwt.verify(token, 'secret-key'); // تأكد من استخدام المفتاح الصحيح
-    } catch (error) {
-        return null;
-    }
-};
-
-// دالة لحساب ما إذا كانت الأرض قريبة بناءً على الموقع
-const isLandNearby = (land, userLocation) => {
-    // من المفترض أن يكون لديك إحداثيات الموقع (خط العرض والطول) في كلا من "land" و "userLocation"
-    // هنا نستخدم مكتبة مثل "geolib" لحساب المسافة بين الموقعين.
-    // إذا كانت المسافة أقل من مسافة معينة، يمكن اعتبار الأرض قريبة
-
-    // مثال باستخدام geolib (افترض أن المواقع هي إحداثيات جغرافية)
-    const { getDistance } = require('geolib');
-    
-    const landLocation = land.location; // الموقع الخاص بالأرض
-    const distance = getDistance(userLocation, landLocation);
-    
-    // تحديد مسافة معينة (مثال 10 كم)
-    return distance <= 10000;
-};
 
 const transporter = nodemailer.createTransport({
     service: 'gmail',
@@ -362,23 +411,42 @@ const notification = async (req, res) => {
                 requests: requestsForWorker
             });
 
-        } else if (role === 'Owner') {
-             // إذا كان المستخدم "Owner"، نبحث عن جميع الطلبات المتعلقة بالأراضي التي يملكها هذا المستخدم.
-    const requestsForOwner = await requests.find({ ownerId: user._id })
-    .populate('workerId')  // جلب بيانات العامل (البريد الإلكتروني والاسم)
-    .populate('landId');  // جلب تفاصيل الأرض
-console.log(user._id);
-            // التحقق إذا لم تكن هناك طلبات
-            if (!requestsForOwner.length) {
-                return res.status(404).json({ message: 'No requests found for this landowner.' });
+        } 
+        else if (role === 'Owner') {
+            try {
+                // استرجاع البريد الإلكتروني للمستخدم من التوكن
+                const userEmail = req.user.email;
+        
+                // البحث عن صاحب الأرض باستخدام البريد الإلكتروني (وضعه في جدول المستخدمين أو الـ "users" إذا لم يكن موجودًا هناك)
+                const user = await Owner.findOne({ email: userEmail });
+        
+                if (!user) {
+                    return res.status(404).json({ message: 'User not found.' });
+                }
+        
+                // البحث عن الطلبات الخاصة بصاحب الأرض والتي حالتها "Accepted" أو "Rejected"
+                const requestsForOwner = await requests.find({
+                    ownerId: user._id,
+                    status: { $in: ['Accepted', 'Rejected'] }  // التصفية حسب حالة الطلب
+                });
+        
+                // التحقق إذا لم تكن هناك طلبات "Accepted" أو "Rejected"
+                if (!requestsForOwner.length) {
+                    return res.status(404).json({ message: 'No requests found for this landowner with Accepted or Rejected status.' });
+                }
+        
+                // إرسال الطلبات التي تم قبولها أو رفضها
+                return res.status(200).json({
+                    message: 'Requests for your land with Accepted or Rejected status retrieved successfully.',
+                    requests: requestsForOwner
+                });
+        
+            } catch (error) {
+                console.error(error);
+                return res.status(500).json({ message: 'An error occurred while retrieving the requests.' });
             }
-
-            // إرسال الطلبات الخاصة بصاحب الأرض
-            return res.status(200).json({
-                message: 'Requests for your land retrieved successfully.yyyy',
-                requests: requestsForOwner
-            });
         }
+        
 
     } catch (error) {
         console.error('Error fetching notifications:', error);
@@ -386,70 +454,106 @@ console.log(user._id);
     }
 };
 
-
 const respondToRequest = async (req, res) => {
     try {
+        console.log('Received request to respond to request.');
+
         // استخرج التوكن من الهيدر
         const token = req.header('authorization');
+        console.log('Authorization token:', token);
+
         if (!token) {
+            console.log('No token provided.');
             return res.status(401).json({ message: 'Authentication token is required.' });
         }
 
         // فك تشفير التوكن والتحقق منه
         const decodedToken = jwt.verify(token, JWT_SECRET_KEY);
-        const { email, role } = decodedToken;  // استخراج البريد الإلكتروني والدور
+        const { email, role } = decodedToken;
+        console.log('Decoded token:', decodedToken);
 
-        // تحقق من أن المستخدم لديه دور "Worker"
         if (role !== 'Worker') {
+            console.log('Access denied: User is not a Worker.');
             return res.status(403).json({ message: 'Access denied. Only Workers can respond to requests.' });
         }
 
         // ابحث عن العامل باستخدام البريد الإلكتروني
         const worker = await Worker.findOne({ email });
         if (!worker) {
+            console.log('Worker not found with email:', email);
             return res.status(404).json({ message: 'Worker not found.' });
         }
 
+        let { requestId, status } = req.params;
+        console.log('Request ID:', requestId, 'Status:', status);
 
-     let { requestId, status } = req.params;  // status: accept/reject
-        console.log(requestId);
-        console.log(status);
-        requestId=requestId.replace(/^:/, ''); 
-        status= status.replace(/^:/, ''); 
+        requestId = requestId.replace(/^:/, '');
+        status = status.replace(/^:/, '');
+        console.log('Cleaned Request ID:', requestId, 'Cleaned Status:', status);
 
         if (!requestId || !status) {
+            console.log('Missing requestId or status.');
             return res.status(400).json({ message: 'Request ID and status (accept/reject) are required.' });
         }
 
-        // تحقق من أن الحالة هي إما قبول أو رفض
         if (status !== 'accept' && status !== 'reject') {
+            console.log('Invalid status provided. Must be "accept" or "reject".');
             return res.status(400).json({ message: 'Invalid status. Must be "accept" or "reject".' });
         }
 
         // العثور على الطلب بناءً على الـ requestId
         const request = await requests.findById(requestId);
         if (!request) {
+            console.log('Request not found with ID:', requestId);
             return res.status(404).json({ message: 'Request not found.' });
         }
 
-        // تحقق من أن الـ workerId في الطلب يتطابق مع الـ workerId المستخرج من قاعدة البيانات
-        if (request.workerId.toString() !== worker._id.toString()) {
-            return res.status(403).json({ message: 'This request does not belong to this worker.' });
+        // Log the current state of the request
+        console.log('Request details:', request);
+
+        // Ensure workerEmail and ownerEmail are set
+        if (!request.workerEmail || !request.owneremail) {
+            console.log('Missing workerEmail or ownerEmail in the request.');
+            return res.status(400).json({ message: 'Request is missing required fields: workerEmail or ownerEmail.' });
         }
 
         // تحديث حالة الطلب بناءً على القرار (قبول أو رفض)
         request.status = status === 'accept' ? 'Accepted' : 'Rejected';
+        console.log('Setting request status to:', request.status);
+
+        // Optionally, update workerEmail and ownerEmail if necessary
+        request.workerEmail = email; // Assuming the worker responding is the one associated with this request
+        request.ownerEmail = request.ownerEmail || 'defaultOwnerEmail@example.com'; // Replace with appropriate owner email logic
+
+        // Save the updated request
         await request.save();
+        console.log('Updated request status:', request.status);
 
         // إرجاع استجابة مع الحالة الجديدة
         return res.status(200).json({
             message: `Request ${status}ed successfully.`,
             request: request,
         });
-
     } catch (error) {
         console.error('Error responding to request:', error);
         return res.status(500).json({ message: 'Server error occurred.' });
+    }
+};
+
+
+const getAllAnnouncements = async (req, res) => {
+    try {
+        // Fetch all works from the database
+        const announcements = await works.find();
+
+        // Return the announcements as a response
+        res.status(200).json({
+            message: "Announcements retrieved successfully.",
+            announcements,
+        });
+    } catch (error) {
+        console.error("Error fetching announcements:", error);
+        res.status(500).json({ message: "Server error occurred." });
     }
 };
 
@@ -458,11 +562,5 @@ const respondToRequest = async (req, res) => {
 
 
 
-
-
-
-
-
-
 module.exports={updateWorkerProfile,notification,respondToRequest,
-    announce,getLands,weathernotification}
+    announce,getLands,weathernotification,getAllAnnouncements,joinland}
