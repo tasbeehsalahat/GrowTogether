@@ -142,7 +142,6 @@ const tokenSchema = new mongoose.Schema({
     skills: { type: [String] }         // المهارات (لـ Worker فقط)
 }, { timestamps: true }); // إضافة الطوابع الزمنية (createdAt, updatedAt)
 const Token = mongoose.model('Token', tokenSchema);
-
 const landSchema = new mongoose.Schema({
     ownerId: {
         type: mongoose.Schema.Types.ObjectId,
@@ -182,13 +181,17 @@ const landSchema = new mongoose.Schema({
     },
     specificAreas: {
         type: Number, // المناطق المحددة داخل الأرض
-optional,
         min: [0, 'Specific areas must be 0 or greater'],
+        default: null,
     },
     workType: {
         type: String,
         required: true,
-        enum: ['زراعة', 'فلاحة', 'تشجير', 'تلقيط', 'حصاد','حراثة','تسميد','رش مبيدات حشرية','اعداد بيوت بلاستيكية','نقل محاصيل'], // الخيارات المتاحة لنوع العمل
+        enum: [
+            'زراعة', 'فلاحة', 'تشجير', 'تلقيط', 'حصاد', 
+            'حراثة', 'تسميد', 'رش مبيدات حشرية', 
+            'اعداد بيوت بلاستيكية', 'نقل محاصيل'
+        ], // الخيارات المتاحة لنوع العمل
     },
     guaranteePrice: {
         type: Number, // السعر الذي يطلبه المالك كضمان (قد يكون مطلوبًا لنوع عمل معين)
@@ -202,8 +205,10 @@ optional,
         type: Number, // نسبة الضمان (قد يكون مطلوبًا لنوع عمل معين)
         default: null,
     },
-    isguarntee:  { type: Boolean, default: false }
-    ,
+    isguarntee: {
+        type: Boolean,
+        default: false, // يشير إلى ما إذا كانت الأرض مضمونة أم لا
+    },
     formattedAddress: {
         type: String, // العنوان المترجم (المستخرج من API)
         required: false,
@@ -216,8 +221,14 @@ optional,
         type: Date,
         default: Date.now, // يتم تعيين تاريخ الإضافة تلقائيًا
     },
-    advertisement:{ type: Boolean, default: false },
-    status:{ type: Boolean, default: false },
+    advertisement: {
+        type: Boolean,
+        default: false,
+    },
+    status: {
+        type: Boolean,
+        default: false,
+    },
     location: {
         type: {
             latitude: { type: Number, required: true }, // خط العرض
@@ -225,8 +236,17 @@ optional,
         },
         required: true, // تأكد من وجود الموقع دائمًا
     },
-
+    temporaryOwnerEmail: {
+        type: String, // البريد الإلكتروني للضامن المؤقت
+        default: null,
+        match: [/.+@.+\..+/, 'Invalid email address'], // تحقق من صحة البريد الإلكتروني
+    },
+    guaranteeEndDate: {
+        type: Date, // تاريخ انتهاء الضمان
+        default: null,
+    },
 });
+
 
 const Land = mongoose.model('Land', landSchema);
 

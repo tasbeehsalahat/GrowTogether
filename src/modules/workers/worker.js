@@ -19,7 +19,7 @@ const API_KEY = '6d12351278a6e0f3a7bdd70bd2ddbd24'; // تخزين المفتاح
 router.post('/announcee',authenticateJWT,announce);
 
 router.patch('/update/:email',authenticateJWT,updateWorkerProfile);
-router.get('/showLands',getLands);
+router.get('/showLands',authenticateJWT,getLands);
 
 // الراوتر لاستقبال التوكن وإرسال إشعار الطقس عبر البريد الإلكتروني
 router.post('/weather-notification',weathernotification);

@@ -6,7 +6,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken'); 
 const nodemailer = require('nodemailer');
 
-const {Owner,Worker,Token,Land,works,requests,workAnnouncements} = require('../DB/types.js');  // تأكد من أن المسار صحيح
+const {Owner,Worker,Token,Land,works,requests,WorkAnnouncement} = require('../DB/types.js');  // تأكد من أن المسار صحيح
 const JWT_SECRET_KEY = '1234#';  // نفس المفتاح السري الذي ستستخدمه للتحقق من التوكن
 const updateWorkerProfile = async (req, res) => {
     try {
@@ -139,7 +139,6 @@ const announce = async (req, res) => {
         res.status(500).json({ message: 'Server error occurred.' });
     }
 };
-
 const getLands = async (req, res) => {
     try {
         const token = req.header('authorization'); // استخراج التوكن من الهيدر
@@ -162,16 +161,14 @@ const getLands = async (req, res) => {
             return res.status(404).json({ message: 'Worker not found.' });
         }
 
-        // استخراج معرف المنطقة (الشارع، البلدة، المدينة)
+        // استخراج معرف الموقع
         const { streetName, town, city } = worker;
 
         if (!streetName && !town && !city) {
             return res.status(400).json({ message: 'Worker location data is incomplete.' });
         }
 
-        let lands;
-
-        // التحقق إذا كانت الأرض ضمان أو إعلان
+        // البحث عن الأراضي بإعلانات الضمان أو إعلانات العمل
         const landsWithGuarantee = await Land.find({
             $or: [
                 { streetName: { $regex: streetName, $options: 'i' } },
@@ -181,16 +178,7 @@ const getLands = async (req, res) => {
             isguarntee: true
         });
 
-        if (landsWithGuarantee.length > 0) {
-            // إذا كانت الأرض ضمان، إرجاع الأراضي التي تملك ضمان
-            return res.status(200).json({
-                message: 'Lands with guarantee found.',
-                lands: landsWithGuarantee
-            });
-        }
-
-        // إذا لم تكن هناك أراضي ضمان، فابحث في إعلانات العمل
-        const workAnnouncements = await workAnnouncements.find({
+        const workAnnouncements = await WorkAnnouncement.find({
             $or: [
                 { location: { $regex: streetName, $options: 'i' } },
                 { location: { $regex: town, $options: 'i' } },
@@ -198,15 +186,15 @@ const getLands = async (req, res) => {
             ]
         });
 
-        // إذا كانت هناك إعلانات عمل
-        if (workAnnouncements.length > 0) {
+        // التحقق من النتائج
+        if (landsWithGuarantee.length > 0 || workAnnouncements.length > 0) {
             return res.status(200).json({
-                message: 'Work announcements found.',
-                announcements: workAnnouncements
+                message: 'Results found.',
+                landsWithGuarantee,
+                workAnnouncements
             });
         }
 
-        // إذا لم يتم العثور على أي نتائج
         return res.status(404).json({ message: 'No lands or work announcements found for this worker.' });
 
     } catch (error) {
@@ -214,6 +202,7 @@ const getLands = async (req, res) => {
         return res.status(500).json({ message: 'Server error occurred.' });
     }
 };
+
 const joinland=async (req, res) => {
     try {
         const token = req.header('authorization');
@@ -395,23 +384,23 @@ const notification = async (req, res) => {
         console.log(user);
 
         if (role === 'Worker') {
-            // إذا كان المستخدم "عامل"، جلب جميع الطلبات المتعلقة به
-            const requestsForWorker = await requests.find({ workerId: user._id })
+            // إذا كان المستخدم "عامل"، جلب جميع الطلبات المتعلقة به التي حالتها "Pending"
+            const requestsForWorker = await requests.find({ workerEmail: user.email, status: 'Pending' })
                 .populate('landId')  // جلب كافة تفاصيل الأرض المرتبطة بالطلب
                 .populate('ownerId', 'email name');  // جلب بيانات المالك (البريد الإلكتروني والاسم)
-
+        
             // التحقق إذا لم تكن هناك طلبات
             if (!requestsForWorker.length) {
-                return res.status(404).json({ message: 'No requests found for this worker.' });
+                return res.status(404).json({ message: 'No pending requests found for this worker.' });
             }
-
+        
             // إرسال الطلبات مع تفاصيل الأرض والمالك
             return res.status(200).json({
-                message: 'Requests retrieved successfully!.',
+                message: 'Pending requests retrieved successfully!',
                 requests: requestsForWorker
             });
-
-        } 
+        }
+        
         else if (role === 'Owner') {
             try {
                 // استرجاع البريد الإلكتروني للمستخدم من التوكن
@@ -460,8 +449,6 @@ const respondToRequest = async (req, res) => {
 
         // استخرج التوكن من الهيدر
         const token = req.header('authorization');
-        console.log('Authorization token:', token);
-
         if (!token) {
             console.log('No token provided.');
             return res.status(401).json({ message: 'Authentication token is required.' });
@@ -470,64 +457,83 @@ const respondToRequest = async (req, res) => {
         // فك تشفير التوكن والتحقق منه
         const decodedToken = jwt.verify(token, JWT_SECRET_KEY);
         const { email, role } = decodedToken;
-        console.log('Decoded token:', decodedToken);
 
         if (role !== 'Worker') {
-            console.log('Access denied: User is not a Worker.');
             return res.status(403).json({ message: 'Access denied. Only Workers can respond to requests.' });
         }
 
         // ابحث عن العامل باستخدام البريد الإلكتروني
         const worker = await Worker.findOne({ email });
         if (!worker) {
-            console.log('Worker not found with email:', email);
             return res.status(404).json({ message: 'Worker not found.' });
         }
 
         let { requestId, status } = req.params;
-        console.log('Request ID:', requestId, 'Status:', status);
-
         requestId = requestId.replace(/^:/, '');
         status = status.replace(/^:/, '');
-        console.log('Cleaned Request ID:', requestId, 'Cleaned Status:', status);
 
-        if (!requestId || !status) {
-            console.log('Missing requestId or status.');
-            return res.status(400).json({ message: 'Request ID and status (accept/reject) are required.' });
-        }
-
-        if (status !== 'accept' && status !== 'reject') {
-            console.log('Invalid status provided. Must be "accept" or "reject".');
-            return res.status(400).json({ message: 'Invalid status. Must be "accept" or "reject".' });
+        if (!requestId || !status || (status !== 'accept' && status !== 'reject')) {
+            return res.status(400).json({ message: 'Invalid request. Request ID and valid status are required.' });
         }
 
         // العثور على الطلب بناءً على الـ requestId
         const request = await requests.findById(requestId);
         if (!request) {
-            console.log('Request not found with ID:', requestId);
             return res.status(404).json({ message: 'Request not found.' });
         }
 
-        // Log the current state of the request
-        console.log('Request details:', request);
+        // تحديث حالة الطلب بناءً على القرار
+        request.status = status === 'accept' ? 'Accepted' : 'Rejected';
+        request.workerEmail = email;
 
-        // Ensure workerEmail and ownerEmail are set
-        if (!request.workerEmail || !request.owneremail) {
-            console.log('Missing workerEmail or ownerEmail in the request.');
-            return res.status(400).json({ message: 'Request is missing required fields: workerEmail or ownerEmail.' });
+        // تحديث الطلب في حالة القبول
+        if (status === 'accept') {
+            const { landId} = request; // افترض أن معرف الأرض ومدة الضمان موجودان في الطلب
+            if (!landId) {
+                return res.status(400).json({ message: 'Land ID is missing in the request.' });
+            }
+
+            const land = await Land.findById(landId);
+            if (!land) {
+                return res.status(404).json({ message: 'Land not found.' });
+            }
+            const guaranteeDuration = land.guaranteeDuration;
+
+            if (land.isguarntee) {
+                console.log(guaranteeDuration);
+                if (!guaranteeDuration) {
+                    return res.status(400).json({ message: 'Guarantee duration is required for guaranteed lands.' });
+                }
+
+                const guaranteeEndDate = new Date();
+                const durationParts = guaranteeDuration.split(' '); // توقع صيغة مثل "3 months"
+                const durationValue = parseInt(durationParts[0]);
+                const durationUnit = durationParts[1]?.toLowerCase();
+
+                if (isNaN(durationValue) || !['month','أشهر', 'months', 'year', 'years'].includes(durationUnit)) {
+                    return res.status(400).json({ message: 'Invalid guarantee duration format.' });
+                }
+
+                if (durationUnit.includes('month')) {
+                    guaranteeEndDate.setMonth(guaranteeEndDate.getMonth() + durationValue);
+                } else if (durationUnit.includes('year')) {
+                    guaranteeEndDate.setFullYear(guaranteeEndDate.getFullYear() + durationValue);
+                }
+
+                // تحديث الأرض
+                land.temporaryOwnerEmail = email; // تعيين العامل كمالك مؤقت
+                land.guaranteeEndDate = guaranteeEndDate; // تحديد تاريخ انتهاء الضمان
+                land.status = true;
+            } else {
+                // تحديث حالة الأرض بشكل طبيعي
+                land.status = true; // تحديث الحالة إذا لم تكن ضمان
+            }
+
+            await land.save();
         }
 
-        // تحديث حالة الطلب بناءً على القرار (قبول أو رفض)
-        request.status = status === 'accept' ? 'Accepted' : 'Rejected';
-        console.log('Setting request status to:', request.status);
-
-        // Optionally, update workerEmail and ownerEmail if necessary
-        request.workerEmail = email; // Assuming the worker responding is the one associated with this request
-        request.ownerEmail = request.ownerEmail || 'defaultOwnerEmail@example.com'; // Replace with appropriate owner email logic
-
-        // Save the updated request
+        // حفظ الطلب المحدث
         await request.save();
-        console.log('Updated request status:', request.status);
 
         // إرجاع استجابة مع الحالة الجديدة
         return res.status(200).json({
@@ -539,7 +545,6 @@ const respondToRequest = async (req, res) => {
         return res.status(500).json({ message: 'Server error occurred.' });
     }
 };
-
 
 const getAllAnnouncements = async (req, res) => {
     try {
