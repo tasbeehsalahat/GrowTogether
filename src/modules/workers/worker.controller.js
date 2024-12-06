@@ -384,17 +384,14 @@ const notification = async (req, res) => {
         console.log(user);
 
         if (role === 'Worker') {
-            // إذا كان المستخدم "عامل"، جلب جميع الطلبات المتعلقة به التي حالتها "Pending"
             const requestsForWorker = await requests.find({ workerEmail: user.email, status: 'Pending' })
                 .populate('landId')  // جلب كافة تفاصيل الأرض المرتبطة بالطلب
                 .populate('ownerId', 'email name');  // جلب بيانات المالك (البريد الإلكتروني والاسم)
         
-            // التحقق إذا لم تكن هناك طلبات
             if (!requestsForWorker.length) {
                 return res.status(404).json({ message: 'No pending requests found for this worker.' });
             }
         
-            // إرسال الطلبات مع تفاصيل الأرض والمالك
             return res.status(200).json({
                 message: 'Pending requests retrieved successfully!',
                 requests: requestsForWorker
@@ -561,6 +558,47 @@ const getAllAnnouncements = async (req, res) => {
         res.status(500).json({ message: "Server error occurred." });
     }
 };
+const sendReminderEmail = async (toEmail, subject, text) => {
+    try {
+        const mailOptions = {
+            from: 'tasbeehsa@gmail.com', // البريد المرسل منه
+            to: toEmail, // البريد المستلم
+            subject: subject,
+            text: text
+        };
+
+        await transporter.sendMail(mailOptions);
+        console.log(`Reminder email sent to ${toEmail}`);
+    } catch (error) {
+        console.error('Error sending email:', error);
+    }
+};
+
+// جدولة التذكير يوميًا عند منتصف الليل
+cron.schedule('0 0 * * *', async () => {
+    console.log('Running scheduled task for sending reminders...');
+
+    // البحث عن الأراضي التي انتهت مدة استلامها
+    const today = new Date();
+    const landsToRemind = await Land.find({ guaranteeEndDate: { $lte: today } }); // الأراضي التي انتهت مدة ضمانها
+
+    for (const land of landsToRemind) {
+        const temporaryOwnerEmail = land.temporaryOwnerEmail; // البريد الإلكتروني للمستأجر
+        const originalOwnerEmail = land.originalOwnerEmail; // البريد الإلكتروني للمالك الأصلي
+
+        // إرسال تذكير للمستأجر
+        if (temporaryOwnerEmail) {
+            const subject = `Reminder: Guarantee period ended for land ${land._id}`;
+            const text = `Dear temporary owner,\n\nThe guarantee period for the land "${land._id}" has ended. The land will be returned to the original owner.\n\nThank you.`;
+            await sendReminderEmail(temporaryOwnerEmail, subject, text);
+        }
+
+        // تحديث قاعدة البيانات لإرجاع الملكية
+        land.temporaryOwnerEmail = null; // إزالة البريد الإلكتروني للمستأجر
+        land.currentOwnerEmail = originalOwnerEmail; // إعادة الملكية للمالك الأصلي
+        await land.save();
+    }
+});
 
 
 
