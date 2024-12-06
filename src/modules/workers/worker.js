@@ -6,7 +6,9 @@ const {authenticateJWT}=require('../middleware/middleware.js');
 const { updateWorkerProfile,  announce, getLands, 
     weathernotification, notification, 
     getAllAnnouncements,respondToRequest, 
-    joinland} = require('./worker.controller.js');
+    joinland,
+    getLandsForGuarantor,
+    creatreport} = require('./worker.controller.js');
 const nodemailer = require('nodemailer');
 
 const multer = require('multer');
@@ -27,4 +29,6 @@ router.get('/notification',authenticateJWT,notification);
 router.get('/respondToRequest/:requestId/:status',authenticateJWT,respondToRequest);
 router.get('/announcement',getAllAnnouncements );
 router.post('/join-land/:landid',authenticateJWT,joinland);
+router.get('/mygyarnterland',authenticateJWT,getLandsForGuarantor);
+router.post('/create-report',authenticateJWT,creatreport);
 module.exports = router;

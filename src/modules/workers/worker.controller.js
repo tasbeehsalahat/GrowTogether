@@ -2,11 +2,12 @@
 const axios=require('axios');
 const express = require('express');const mongoose = require('mongoose');
 const multer = require('multer');
-const bcrypt = require('bcrypt');
+
 const jwt = require('jsonwebtoken'); 
 const nodemailer = require('nodemailer');
+const cron = require('node-cron');
 
-const {Owner,Worker,Token,Land,works,requests,WorkAnnouncement} = require('../DB/types.js');  // تأكد من أن المسار صحيح
+const {Owner,Worker,DailyReport,Land,works,requests,WorkAnnouncement} = require('../DB/types.js');  // تأكد من أن المسار صحيح
 const JWT_SECRET_KEY = '1234#';  // نفس المفتاح السري الذي ستستخدمه للتحقق من التوكن
 const updateWorkerProfile = async (req, res) => {
     try {
@@ -267,8 +268,6 @@ const joinland=async (req, res) => {
         return res.status(500).json({ message: 'Server error occurred.' });
     }
 };
-
-
 const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
@@ -521,6 +520,7 @@ const respondToRequest = async (req, res) => {
                 land.temporaryOwnerEmail = email; // تعيين العامل كمالك مؤقت
                 land.guaranteeEndDate = guaranteeEndDate; // تحديد تاريخ انتهاء الضمان
                 land.status = true;
+                land.advertisement=false;
             } else {
                 // تحديث حالة الأرض بشكل طبيعي
                 land.status = true; // تحديث الحالة إذا لم تكن ضمان
@@ -573,7 +573,6 @@ const sendReminderEmail = async (toEmail, subject, text) => {
         console.error('Error sending email:', error);
     }
 };
-
 // جدولة التذكير يوميًا عند منتصف الليل
 cron.schedule('0 0 * * *', async () => {
     console.log('Running scheduled task for sending reminders...');
@@ -600,10 +599,122 @@ cron.schedule('0 0 * * *', async () => {
     }
 });
 
+const getLandsForGuarantor = async (req, res) => {
+    try {
+        console.log('Start of getLandsForGuarantor function');
+
+        // استخرج التوكن من الهيدر
+        const token = req.header('authorization');
+        if (!token) {
+            console.log('No token provided.');
+            return res.status(401).json({ message: 'Authentication token is required.' });
+        }
+
+        console.log('Token received:', token);
+
+        // فك تشفير التوكن والتحقق منه
+        const decodedToken = jwt.verify(token, JWT_SECRET_KEY);
+        const { email, role } = decodedToken;
+        console.log('Decoded token:', decodedToken);
+
+        if (role !== 'Worker') {
+            console.log('Access denied. Only Workers can respond to requests.');
+            return res.status(403).json({ message: 'Access denied. Only Workers can respond to requests.' });
+        }
+
+        // ابحث عن العامل باستخدام البريد الإلكتروني
+        const worker = await Worker.findOne({ email: email });
+        if (!worker) {
+            console.log('Worker not found for email:', email);
+            return res.status(404).json({ message: 'Worker not found.' });
+        }
+        
+        console.log('Worker found:', worker);
+
+        // تحقق إذا كان العامل هو ضامن عبر فحص حقل "isGuarantor"
+        if (!worker.isGuarantor) {
+            console.log('The worker is not a guarantor.');
+            return res.status(403).json({ message: 'You are not a guarantor.' });
+        }
+
+        console.log('The worker is a guarantor.');
+
+        const lands = await Land.find({
+            temporaryOwnerEmail: email // البحث عن الأراضي التي الضامن هو المؤقت لها
+        });
+
+        if (lands.length === 0) {
+            console.log('No lands found for guarantor:', email);
+            return res.status(404).json({ message: 'You are not a guarantor for any land' });
+        }
+
+        console.log('Lands found for guarantor:', lands);
+
+        // إرجاع تفاصيل الأراضي التي ضامنها هذا العامل
+        res.status(200).json(lands);
+
+    } catch (err) {
+        console.error('Error occurred:', err);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
 
 
 
+const express = require('express');
+const jwt = require('jsonwebtoken');
+const Land = require('./models/Land');  // نموذج الأرض
+const DailyReport = require('./models/DailyReport');  // نموذج التقرير اليومي
+
+const router = express.Router();
+
+// راوتر POST لإنشاء التقرير
+const creatreport= async (req, res) => {
+  const { land_id, report_date, completion_percentage, tasks_completed, challenges, recommendations, hours_worked } = req.body;
+
+  try {
+    // استخرج التوكن من الهيدر
+    const token = req.header('authorization');
+    if (!token) {
+      return res.status(401).json({ message: 'التوكن مطلوب للمصادقة.' });
+    }
+
+    // فك التشفير والتحقق من التوكن
+    const decodedToken = jwt.verify(token, 'your-secret-key'); // استخدم السر الذي تستخدمه للتشفير
+    const { email } = decodedToken;  // البريد الإلكتروني من التوكن
+
+    // التحقق من تطابق البريد الإلكتروني مع صاحب الأرض
+    const land = await Land.findById(land_id);  // جلب الأرض بناءً على ID
+    if (!land) {
+      return res.status(404).json({ message: 'الأرض غير موجودة' });
+    }
+
+    if (land.owner_email !== email) {
+      return res.status(403).json({ message: 'البريد الإلكتروني لا يتطابق مع صاحب الأرض' });
+    }
+
+    // إنشاء التقرير الجديد
+    const newReport = new DailyReport({
+      land_id,
+      report_date,
+      completion_percentage,
+      tasks_completed,
+      challenges,
+      recommendations,
+      hours_worked
+    });
+
+    // حفظ التقرير في قاعدة البيانات
+    await newReport.save();
+
+    // إرسال الاستجابة بنجاح
+    res.status(201).json({ message: 'تم إضافة التقرير بنجاح' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'حدث خطأ أثناء إضافة التقرير' });
+  }
+};
 
 
-module.exports={updateWorkerProfile,notification,respondToRequest,
+module.exports={ creatreport,getLandsForGuarantor,updateWorkerProfile,notification,respondToRequest,
     announce,getLands,weathernotification,getAllAnnouncements,joinland}

@@ -251,6 +251,18 @@ const landSchema = new mongoose.Schema({
 const Land = mongoose.model('Land', landSchema);
 
 
+const dailyReportSchema = new mongoose.Schema({
+    land_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Land', required: true },
+    report_date: { type: Date, required: true },
+    completion_percentage: { type: Number, required: true },
+    tasks_completed: { type: String, required: true },
+    challenges: { type: String, required: true },
+    recommendations: { type: String, required: true },
+    hours_worked: { type: Number, required: true },
+    created_at: { type: Date, default: Date.now }
+  });
+  
+  const DailyReport = mongoose.model('DailyReport', dailyReportSchema);
 const Work = new mongoose.Schema({
     skills: {
         type: [String], 
@@ -438,4 +450,4 @@ const RequestSchema= new mongoose.Schema({
 const requests = mongoose.model('Request', RequestSchema);
 
 
-module.exports ={requests,WorkAnnouncement,Owner,Worker,Token,Land,works,Company,Work_analysis,Keywords,keywordsSchema};
+module.exports ={requests,DailyReport,WorkAnnouncement,Owner,Worker,Token,Land,works,Company,Work_analysis,Keywords,keywordsSchema};
