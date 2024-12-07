@@ -8,9 +8,8 @@ const { updateWorkerProfile,  announce, getLands,
     getAllAnnouncements,respondToRequest, 
     joinland,
     getLandsForGuarantor,
-    creatreport} = require('./worker.controller.js');
-const nodemailer = require('nodemailer');
-
+    toggleWorkStatus,
+    creatReport} = require('./worker.controller.js');
 const multer = require('multer');
 const axios = require("axios");
 const {Owner,Worker,Token,Land,works} = require('../DB/types.js');  // تأكد من أن المسار صحيح
@@ -30,5 +29,7 @@ router.get('/respondToRequest/:requestId/:status',authenticateJWT,respondToReque
 router.get('/announcement',getAllAnnouncements );
 router.post('/join-land/:landid',authenticateJWT,joinland);
 router.get('/mygyarnterland',authenticateJWT,getLandsForGuarantor);
-router.post('/create-report',authenticateJWT,creatreport);
+router.post('/create-report/:land_id',authenticateJWT,creatReport);
+router.post('/toggle-work-status', toggleWorkStatus);
+
 module.exports = router;

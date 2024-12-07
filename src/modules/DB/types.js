@@ -252,17 +252,90 @@ const Land = mongoose.model('Land', landSchema);
 
 
 const dailyReportSchema = new mongoose.Schema({
-    land_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Land', required: true },
-    report_date: { type: Date, required: true },
-    completion_percentage: { type: Number, required: true },
-    tasks_completed: { type: String, required: true },
-    challenges: { type: String, required: true },
-    recommendations: { type: String, required: true },
-    hours_worked: { type: Number, required: true },
-    created_at: { type: Date, default: Date.now }
-  });
+  land_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Land', // الربط مع النموذج الخاص بالأرض
+    required: true,
+  },
+  report_date: {
+    type: Date,
+    default: Date.now,
+  },
+  completion_percentage: {
+    type: Number,
+    required: true,
+    min: 0,
+    max: 100,
+  },
+  tasks_completed: {
+    type: [String], // قائمة بالمهام المكتملة
+    required: true,
+  },
+  challenges: {
+    type: [String], // قائمة بالتحديات التي تمت مواجهتها
+    required: true,
+  },
+  recommendations: {
+    type: [String], // قائمة بالتوصيات
+    required: true,
+  },
+  hours_worked: {
+    type: Number,
+    required: true,
+  },
+  owner_email: {
+    type: String,
+    required: true,
+  },
+  reporter_email: {
+    type: String,
+    required: true,
+  },
+  analysis: {
+    avgCompletion: { type: Number },
+    totalHours: { type: Number },
+    challengesAnalysis: { type: String },
+    monthlyData: { type: String },
+  },
+  status: {
+    type: String,
+    enum: ['مقدم', 'مراجعة صاحب الأرض', 'مغلق'],
+    default: 'مقدم', // الحالة الافتراضية للتقرير
+  },
+  owner_feedback: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'OwnerFeedback', // الربط بملاحظات صاحب الأرض
+  }
+});
+  
   
   const DailyReport = mongoose.model('DailyReport', dailyReportSchema);
+
+
+const ownerFeedbackSchema = new mongoose.Schema({
+  report_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'DailyReport', // الربط بالتقرير
+    required: true,
+  },
+  feedback: {
+    type: String,
+    required: true, // تعليق صاحب الأرض
+  },
+  status: {
+    type: String,
+    enum: ['مقبولة', 'مرفوضة'],
+    required: true,
+    default: 'مقبولة', // حالة الملاحظة
+  },
+  date: {
+    type: Date,
+    default: Date.now,
+  },
+});
+
+const OwnerFeedback= mongoose.model('OwnerFeedback', ownerFeedbackSchema);
+
 const Work = new mongoose.Schema({
     skills: {
         type: [String], 
@@ -450,4 +523,4 @@ const RequestSchema= new mongoose.Schema({
 const requests = mongoose.model('Request', RequestSchema);
 
 
-module.exports ={requests,DailyReport,WorkAnnouncement,Owner,Worker,Token,Land,works,Company,Work_analysis,Keywords,keywordsSchema};
+module.exports ={OwnerFeedback, requests,DailyReport,WorkAnnouncement,Owner,Worker,Token,Land,works,Company,Work_analysis,Keywords,keywordsSchema};

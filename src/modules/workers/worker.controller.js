@@ -1,12 +1,12 @@
 
 const axios=require('axios');
-const express = require('express');const mongoose = require('mongoose');
+const mongoose = require('mongoose');
 const multer = require('multer');
 
 const jwt = require('jsonwebtoken'); 
 const nodemailer = require('nodemailer');
-const cron = require('node-cron');
-
+const cron = require('node-cron'); 
+const moment = require('moment');
 const {Owner,Worker,DailyReport,Land,works,requests,WorkAnnouncement} = require('../DB/types.js');  // تأكد من أن المسار صحيح
 const JWT_SECRET_KEY = '1234#';  // نفس المفتاح السري الذي ستستخدمه للتحقق من التوكن
 const updateWorkerProfile = async (req, res) => {
@@ -637,20 +637,17 @@ const getLandsForGuarantor = async (req, res) => {
             return res.status(403).json({ message: 'You are not a guarantor.' });
         }
 
-        console.log('The worker is a guarantor.');
+       
 
         const lands = await Land.find({
-            temporaryOwnerEmail: email // البحث عن الأراضي التي الضامن هو المؤقت لها
-        });
-
+            temporaryOwnerEmail:"s120276399@stu.najah.edu" // البحث عن الأراضي التي الضامن هو المؤقت لها
+        }).exec();
+        console.log(lands);
         if (lands.length === 0) {
             console.log('No lands found for guarantor:', email);
             return res.status(404).json({ message: 'You are not a guarantor for any land' });
         }
-
         console.log('Lands found for guarantor:', lands);
-
-        // إرجاع تفاصيل الأراضي التي ضامنها هذا العامل
         res.status(200).json(lands);
 
     } catch (err) {
@@ -658,63 +655,170 @@ const getLandsForGuarantor = async (req, res) => {
         res.status(500).json({ message: 'Server error' });
     }
 };
+let start_time = null;  // لتخزين وقت البدء
+let end_time = null;    // لتخزين وقت الانتهاء
 
-
-
-const express = require('express');
-const jwt = require('jsonwebtoken');
-const Land = require('./models/Land');  // نموذج الأرض
-const DailyReport = require('./models/DailyReport');  // نموذج التقرير اليومي
-
-const router = express.Router();
-
-// راوتر POST لإنشاء التقرير
-const creatreport= async (req, res) => {
-  const { land_id, report_date, completion_percentage, tasks_completed, challenges, recommendations, hours_worked } = req.body;
-
+const toggleWorkStatus = async (req, res) => {
   try {
-    // استخرج التوكن من الهيدر
-    const token = req.header('authorization');
-    if (!token) {
-      return res.status(401).json({ message: 'التوكن مطلوب للمصادقة.' });
+    if (!start_time) {
+      // إذا لم يكن هناك وقت بدء، نقوم بتسجيله
+      start_time = moment();
+      return res.status(200).json({
+        message: 'تم تسجيل وقت البدء',
+        start_time: start_time.format('YYYY-MM-DD HH:mm:ss'),
+      });
+    } else {
+      // إذا كان هناك وقت بدء، نقوم بتسجيل وقت الانتهاء وحساب الفارق
+      end_time = moment();
+      const duration = moment.duration(end_time.diff(start_time));
+      const total_hours_worked = duration.asHours(); // نحسب الساعات الإجمالية
+
+      return res.status(200).json({
+        message: 'تم تسجيل وقت الانتهاء',
+        start_time: start_time.format('YYYY-MM-DD HH:mm:ss'),
+        end_time: end_time.format('YYYY-MM-DD HH:mm:ss'),
+        total_duration: `${duration.hours()} hours, ${duration.minutes()} minutes`,
+        total_hours_worked, // نرسل ساعات العمل الفعلية
+      });
     }
-
-    // فك التشفير والتحقق من التوكن
-    const decodedToken = jwt.verify(token, 'your-secret-key'); // استخدم السر الذي تستخدمه للتشفير
-    const { email } = decodedToken;  // البريد الإلكتروني من التوكن
-
-    // التحقق من تطابق البريد الإلكتروني مع صاحب الأرض
-    const land = await Land.findById(land_id);  // جلب الأرض بناءً على ID
-    if (!land) {
-      return res.status(404).json({ message: 'الأرض غير موجودة' });
-    }
-
-    if (land.owner_email !== email) {
-      return res.status(403).json({ message: 'البريد الإلكتروني لا يتطابق مع صاحب الأرض' });
-    }
-
-    // إنشاء التقرير الجديد
-    const newReport = new DailyReport({
-      land_id,
-      report_date,
-      completion_percentage,
-      tasks_completed,
-      challenges,
-      recommendations,
-      hours_worked
-    });
-
-    // حفظ التقرير في قاعدة البيانات
-    await newReport.save();
-
-    // إرسال الاستجابة بنجاح
-    res.status(201).json({ message: 'تم إضافة التقرير بنجاح' });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'حدث خطأ أثناء إضافة التقرير' });
+    res.status(500).json({ message: 'حدث خطأ أثناء العملية' });
   }
 };
+const creatReport = async (req, res) => {
+    const { completion_percentage, tasks_completed, challenges, recommendations } = req.body;
+    const { land_id } = req.params;
+    const { total_hours_worked } = req.body;
+  
+    try {
+      const token = req.header('authorization');
+      if (!token) {
+        return res.status(401).json({ message: 'التوكن مطلوب للمصادقة.' });
+      }
+  
+      const decodedToken = jwt.verify(token, JWT_SECRET_KEY);
+      const { email: user_email } = decodedToken;
+  
+      const land = await Land.findById(land_id);
+      if (!land) {
+        return res.status(404).json({ message: 'الأرض غير موجودة' });
+      }
+  
+      if (land.temporaryOwnerEmail !== user_email) {
+        return res.status(403).json({ message: 'البريد الإلكتروني لا يتطابق مع صاحب الأرض' });
+      }
+  
+      const existingReport = await DailyReport.findOne({
+        land_id,
+        report_date: { $gte: new Date(new Date().setHours(0, 0, 0, 0)), $lt: new Date(new Date().setHours(23, 59, 59, 999)) },
+      });
+  
+      if (existingReport) {
+        return res.status(400).json({ message: 'تم تقديم تقرير لهذا اليوم بالفعل' });
+      }
+  
+      if (completion_percentage < 0 || completion_percentage > 100) {
+        return res.status(400).json({ message: 'نسبة الإنجاز يجب أن تكون بين 0 و 100' });
+      }
+  
+      if (total_hours_worked < 0) {
+        return res.status(400).json({ message: 'ساعات العمل يجب أن تكون رقمًا موجبًا' });
+      }
+  
+      const landemail = await Land.findOne({ _id: land_id }).select('ownerEmail');
+      const ownerEmail = landemail.ownerEmail;
+  
+      const avgCompletion = await calculateAverageCompletion(land_id);
+      const totalHours = await calculateTotalHoursWorked(land_id);
+      const challengesAnalysis = await analyzeChallenges(land_id);
+      const monthlyData = await analyzeMonthlyData(land_id);
+  
+      const analysis = {
+        avgCompletion,
+        totalHours,
+        challengesAnalysis: JSON.stringify(challengesAnalysis),
+        monthlyData: JSON.stringify(monthlyData),
+      };
+  
+      const newReport = new DailyReport({
+        land_id,
+        report_date: new Date(),
+        completion_percentage,
+        tasks_completed,
+        challenges,
+        recommendations,
+        hours_worked: total_hours_worked,
+        owner_email: ownerEmail,
+        reporter_email: user_email,
+        analysis,
+      });
+  
+      await newReport.save();
+  
+      res.status(201).json({
+        message: 'تم إضافة التقرير بنجاح',
+        analysis,
+        reportDetails: {
+          land_id,
+          completion_percentage,
+          tasks_completed,
+          challenges,
+          recommendations,
+          hours_worked: total_hours_worked,
+        },
+      });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: 'حدث خطأ أثناء إضافة التقرير', error: error.message });
+    }
+};
 
+  
+  const calculateAverageCompletion = async (land_id) => {
+    const reports = await DailyReport.find({ land_id });
+    if (reports.length === 0) return 0;
+  
+    const totalCompletion = reports.reduce((acc, report) => acc + report.completion_percentage, 0);
+    return totalCompletion / reports.length;
+  };
+  const calculateTotalHoursWorked = async (land_id) => {
+    const reports = await DailyReport.find({ land_id });
+    if (reports.length === 0) return 0;
+  
+    const totalHours = reports.reduce((acc, report) => acc + report.hours_worked, 0);
+    return totalHours;
+  };
+  const analyzeChallenges = async (land_id) => {
+    const reports = await DailyReport.find({ land_id });
+    const challengeFrequency = {};
+  
+    reports.forEach((report) => {
+      const challenges = report.challenges.split(','); // نفترض أن التحديات مفصولة بفواصل
+      challenges.forEach((challenge) => {
+        challenge = challenge.trim();
+        challengeFrequency[challenge] = (challengeFrequency[challenge] || 0) + 1;
+      });
+    });
+  
+    return challengeFrequency;
+  };
+  const analyzeMonthlyData = async (land_id) => {
+    const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    const endOfMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0);
+  
+    const reports = await DailyReport.find({
+      land_id,
+      report_date: { $gte: startOfMonth, $lt: endOfMonth }
+    });
+  
+    const totalCompletion = reports.reduce((acc, report) => acc + report.completion_percentage, 0);
+    const avgCompletion = reports.length ? totalCompletion / reports.length : 0;
+  
+    return { avgCompletion, reports };
+  };
+        
 
-module.exports={ creatreport,getLandsForGuarantor,updateWorkerProfile,notification,respondToRequest,
+  module.exports={toggleWorkStatus, creatReport,getLandsForGuarantor,
+    updateWorkerProfile,notification,respondToRequest,
     announce,getLands,weathernotification,getAllAnnouncements,joinland}
