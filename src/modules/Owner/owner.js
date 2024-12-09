@@ -6,7 +6,8 @@ const router = express.Router();
 const {authenticateJWT}=require('../middleware/middleware.js');
 const { addLand, getAllLands,updateLand, deleteLand, getLandbyid, updateOwnerProfile, 
     getLandAdvertisement, addLanddaily, getguarntors, calculateWorkersForLand,
-     createWorkAnnouncement, showLand, createRequest } = require('./owner.controller.js');
+     createWorkAnnouncement, showLand, createRequest, 
+     feedback} = require('./owner.controller.js');
 router.get('/getmylands',authenticateJWT,getAllLands);
 router.patch('/updatemyland/:landId',authenticateJWT,updateLand);
 router.delete('/deletemylands/:landid',authenticateJWT,deleteLand);
@@ -36,7 +37,7 @@ router.get('/calculateworkers/:landid', authenticateJWT, calculateWorkersForLand
 router.post('/create-work-announcement/:landid',authenticateJWT,createWorkAnnouncement);
 router.get('/showlands',authenticateJWT,showLand);
 router.get('/request/:landId/:workerEmail',authenticateJWT,createRequest);
-
+router.post('/feedback/:report_id',authenticateJWT,feedback);
 // 1. راوتر لعرض التقرير بناءً على معرف الأرض
 router.get('/report/:land_id', async (req, res) => {
   const { land_id } = req.params;
@@ -65,72 +66,7 @@ router.get('/report/:land_id', async (req, res) => {
   }
 });
 
-// 2. راوتر لإضافة ملاحظة من صاحب الأرض
-router.post('/feedback/:report_id', async (req, res) => {
-  const { report_id } = req.params;
-  const { feedback, status } = req.body;
-  
-  try {
-    const token = req.header('authorization');
-    if (!token) {
-      return res.status(401).json({ message: 'التوكن مطلوب للمصادقة.' });
-    }
-    
-    const decodedToken = jwt.verify(token, JWT_SECRET_KEY);
-    const { email: user_email } = decodedToken;
-    
-    // التأكد من أن صاحب الأرض هو الذي يضيف الملاحظة
-    const report = await DailyReport.findById(report_id);
-    if (!report || report.owner_email !== user_email) {
-      return res.status(403).json({ message: 'ليس لديك صلاحية لإضافة الملاحظات لهذا التقرير.' });
-    }
-    
-    const newFeedback = new OwnerFeedback({
-      report_id,
-      feedback,
-      status,
-    });
-    
-    await newFeedback.save();
 
-    // تحديث حالة التقرير إلى "مراجعة صاحب الأرض"
-    report.status = 'مراجعة صاحب الأرض';
-    await report.save();
-
-    res.status(201).json({
-      message: 'تم إضافة الملاحظة بنجاح',
-      feedback: newFeedback,
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'حدث خطأ أثناء إضافة الملاحظة', error: error.message });
-  }
-});
-
-// 3. راوتر لتحديث حالة ملاحظة صاحب الأرض
-router.put('/feedback/:feedback_id', async (req, res) => {
-  const { feedback_id } = req.params;
-  const { status } = req.body;
-  
-  try {
-    const feedback = await OwnerFeedback.findById(feedback_id);
-    if (!feedback) {
-      return res.status(404).json({ message: 'الملاحظة غير موجودة' });
-    }
-
-    // تحديث حالة الملاحظة
-    feedback.status = status;
-    await feedback.save();
-
-    res.status(200).json({
-      message: 'تم تحديث حالة الملاحظة بنجاح',
-      feedback,
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'حدث خطأ أثناء تحديث الملاحظة', error: error.message });
-  }
-});
 
 
 module.exports = router;

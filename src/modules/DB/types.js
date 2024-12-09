@@ -311,28 +311,31 @@ const dailyReportSchema = new mongoose.Schema({
   
   const DailyReport = mongoose.model('DailyReport', dailyReportSchema);
 
-
-const ownerFeedbackSchema = new mongoose.Schema({
-  report_id: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'DailyReport', // الربط بالتقرير
-    required: true,
-  },
-  feedback: {
-    type: String,
-    required: true, // تعليق صاحب الأرض
-  },
-  status: {
-    type: String,
-    enum: ['مقبولة', 'مرفوضة'],
-    required: true,
-    default: 'مقبولة', // حالة الملاحظة
-  },
-  date: {
-    type: Date,
-    default: Date.now,
-  },
-});
+  const ownerFeedbackSchema = new mongoose.Schema({
+    report_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'DailyReport', // الربط بالتقرير
+      required: true,
+    },
+    feedback: {
+      type: String,
+      required: true, // تعليق صاحب الأرض
+    },
+    status: {
+        type: String,
+        enum: ['Pending', 'Reviewed', 'Accepted', 'مقبولة','مرفوضة','Rejected'], // الحالات المتاحة
+        default: 'Pending', // الحالة الافتراضية
+      },
+    owner_email: {
+      type: String,
+      required: true, // بريد الإلكتروني لصاحب الأرض
+    },
+    date: {
+      type: Date,
+      default: Date.now,
+    },
+  });
+  
 
 const OwnerFeedback= mongoose.model('OwnerFeedback', ownerFeedbackSchema);
 

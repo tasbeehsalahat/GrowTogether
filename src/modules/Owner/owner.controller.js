@@ -3,7 +3,7 @@ const cron = require('node-cron');
 
 const multer = require('multer');
 const jwt = require('jsonwebtoken'); 
-const {Owner,Worker,Token,requests,WorkAnnouncement,Land,works} = require('../DB/types.js');  // تأكد من أن المسار صحيح
+const {Owner,Worker,OwnerFeedback,requests,WorkAnnouncement,DailyReport,Land,works} = require('../DB/types.js');  // تأكد من أن المسار صحيح
 const JWT_SECRET_KEY = '1234#';  // نفس المفتاح السري الذي ستستخدمه للتحقق من التوكن
 const axios=require('axios');
 const nodemailer = require('nodemailer');
@@ -1219,106 +1219,54 @@ const pending=async (req,res)=>{
 
 }
 
-
-// 1. راوتر لعرض التقرير بناءً على معرف الأرض
-router.get('/report/:land_id', async (req, res) => {
-    const { land_id } = req.params;
+const feedback= async (req, res) => {
+    const { report_id } = req.params; // معرف التقرير
+    const { feedback } = req.body; // محتوى الملاحظة
     
     try {
-      const report = await DailyReport.findOne({ land_id }).populate('owner_feedback');
-      if (!report) {
-        return res.status(404).json({ message: 'التقرير غير موجود' });
-      }
-  
-      res.status(200).json({
-        reportDetails: {
-          land_id: report.land_id,
-          report_date: report.report_date,
-          completion_percentage: report.completion_percentage,
-          tasks_completed: report.tasks_completed,
-          challenges: report.challenges,
-          recommendations: report.recommendations,
-          hours_worked: report.hours_worked,
-          owner_feedback: report.owner_feedback,  // إرجاع ملاحظات صاحب الأرض إذا كانت موجودة
+        const token = req.header('authorization'); // استخراج التوكن من الهيدر
+        if (!token) {
+            return res.status(401).json({ message: 'التوكن مطلوب للمصادقة.' }); // خطأ إذا لم يتم تقديم التوكن
         }
-      });
+      
+        const decodedToken = jwt.verify(token, JWT_SECRET_KEY); // التحقق من صحة التوكن
+        const { email: user_email } = decodedToken; // استخراج البريد الإلكتروني من التوكن
+      
+        // التحقق من أن المستخدم هو صاحب الأرض
+        const report = await DailyReport.findById(report_id);
+        if (!report || report.owner_email !== user_email) {
+            return res.status(403).json({ message: 'ليس لديك صلاحية لإضافة الملاحظات لهذا التقرير.' });
+        }
+      
+        const newFeedback = new OwnerFeedback({
+            report_id,
+            feedback,
+            status: 'Pending', // تعيين الحالة الافتراضية عند إنشاء الملاحظة
+            
+            owner_email: user_email, // إضافة البريد الإلكتروني المستخرج من التوكن
+
+        }); // إنشاء ملاحظة جديدة
+      
+          
+        await newFeedback.save(); // حفظ الملاحظة في قاعدة البيانات
+  
+        // تحديث حالة التقرير
+        report.status = 'مراجعة صاحب الأرض';
+        await report.save();
+  
+        res.status(201).json({
+            message: 'تم إضافة الملاحظة بنجاح',
+            feedback: newFeedback,
+        });
     } catch (error) {
-      console.error(error);
-      res.status(500).json({ message: 'حدث خطأ أثناء استرجاع التقرير', error: error.message });
+        console.error(error);
+        res.status(500).json({ message: 'حدث خطأ أثناء إضافة الملاحظة', error: error.message });
     }
-  });
+};
+
+
   
-  // 2. راوتر لإضافة ملاحظة من صاحب الأرض
-  router.post('/feedback/:report_id', async (req, res) => {
-    const { report_id } = req.params;
-    const { feedback, status } = req.body;
-    
-    try {
-      const token = req.header('authorization');
-      if (!token) {
-        return res.status(401).json({ message: 'التوكن مطلوب للمصادقة.' });
-      }
-      
-      const decodedToken = jwt.verify(token, JWT_SECRET_KEY);
-      const { email: user_email } = decodedToken;
-      
-      // التأكد من أن صاحب الأرض هو الذي يضيف الملاحظة
-      const report = await DailyReport.findById(report_id);
-      if (!report || report.owner_email !== user_email) {
-        return res.status(403).json({ message: 'ليس لديك صلاحية لإضافة الملاحظات لهذا التقرير.' });
-      }
-      
-      const newFeedback = new OwnerFeedback({
-        report_id,
-        feedback,
-        status,
-      });
-      
-      await newFeedback.save();
-  
-      // تحديث حالة التقرير إلى "مراجعة صاحب الأرض"
-      report.status = 'مراجعة صاحب الأرض';
-      await report.save();
-  
-      res.status(201).json({
-        message: 'تم إضافة الملاحظة بنجاح',
-        feedback: newFeedback,
-      });
-    } catch (error) {
-      console.error(error);
-      res.status(500).json({ message: 'حدث خطأ أثناء إضافة الملاحظة', error: error.message });
-    }
-  });
-  
-  // 3. راوتر لتحديث حالة ملاحظة صاحب الأرض
-  router.put('/feedback/:feedback_id', async (req, res) => {
-    const { feedback_id } = req.params;
-    const { status } = req.body;
-    
-    try {
-      const feedback = await OwnerFeedback.findById(feedback_id);
-      if (!feedback) {
-        return res.status(404).json({ message: 'الملاحظة غير موجودة' });
-      }
-  
-      // تحديث حالة الملاحظة
-      feedback.status = status;
-      await feedback.save();
-  
-      res.status(200).json({
-        message: 'تم تحديث حالة الملاحظة بنجاح',
-        feedback,
-      });
-    } catch (error) {
-      console.error(error);
-      res.status(500).json({ message: 'حدث خطأ أثناء تحديث الملاحظة', error: error.message });
-    }
-  });
-  
-  
-  module.exports = router;
-  
-module.exports={createRequest,pending,
+module.exports={feedback,createRequest,pending,
     showLand ,createWorkAnnouncement
     ,calculateWorkersForLand,getAllLands,
     getguarntors, addLanddaily,updateLand,

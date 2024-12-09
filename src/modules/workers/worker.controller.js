@@ -7,7 +7,7 @@ const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
 const cron = require('node-cron'); 
 const moment = require('moment');
-const {Owner,Worker,DailyReport,Land,works,requests,WorkAnnouncement} = require('../DB/types.js');  // تأكد من أن المسار صحيح
+const {Owner,Worker,DailyReport,OwnerFeedback,Land,works,requests,WorkAnnouncement} = require('../DB/types.js');  // تأكد من أن المسار صحيح
 const JWT_SECRET_KEY = '1234#';  // نفس المفتاح السري الذي ستستخدمه للتحقق من التوكن
 const updateWorkerProfile = async (req, res) => {
     try {
@@ -372,7 +372,6 @@ const notification = async (req, res) => {
             return res.status(403).json({ message: 'Access denied. Only Workers or Landowners can view notifications.' });
         }
 
-        // البحث عن المستخدم بناءً على البريد الإلكتروني
         const user = await Worker.findOne({ email }) || await Owner.findOne({ email });
         console.log(email);
         if (!user) {
@@ -382,55 +381,98 @@ const notification = async (req, res) => {
 
         console.log(user);
 
-        if (role === 'Worker') {
-            const requestsForWorker = await requests.find({ workerEmail: user.email, status: 'Pending' })
-                .populate('landId')  // جلب كافة تفاصيل الأرض المرتبطة بالطلب
-                .populate('ownerId', 'email name');  // جلب بيانات المالك (البريد الإلكتروني والاسم)
+       if (role === 'Worker') {
+       
+                // استرجاع البريد الإلكتروني للمستخدم من التوكن
+                const userEmail = req.user.email;
+                
+                // 1. البحث عن الطلبات الخاصة بالعامل والتي حالتها "Pending"
+                const requestsForWorker = await requests.find({
+                    workerEmail: userEmail, // التصفية باستخدام البريد الإلكتروني للعامل
+                    status: 'Pending' // التصفية حسب حالة الطلب
+                })
+                .populate('landId') // جلب كافة تفاصيل الأرض المرتبطة بالطلب
+                .populate('ownerId', 'email name'); // جلب بيانات المالك (البريد الإلكتروني والاسم)
         
-            if (!requestsForWorker.length) {
-                return res.status(404).json({ message: 'No pending requests found for this worker.' });
-            }
+                // 2. البحث عن التقارير التي تم تقديمها من قِبل العامل
+                const reportsForWorker = await DailyReport.find({
+                    reporter_email: userEmail // البحث باستخدام البريد الإلكتروني للعامل
+                });
         
-            return res.status(200).json({
-                message: 'Pending requests retrieved successfully!',
-                requests: requestsForWorker
-            });
-        }
+                // 3. إذا لم تكن هناك طلبات أو تقارير
+                if (!requestsForWorker.length && !reportsForWorker.length) {
+                    return res.status(404).json({ 
+                        message: 'No pending requests or reports found for this worker.' 
+                    });
+                }
+        
+                // متغير لتخزين الطلبات التي تم تحديث الفيدباك لها
+                let feedbackUpdatedRequests = [];
+        
+                // 4. البحث عن الفيدباك لكل تقرير تم تقديمه من العامل
+                for (let report of reportsForWorker) {
+                    const feedback = await OwnerFeedback.findOne({ report_id: report._id });
+        
+                    if (feedback && feedback.status === 'Pending') {
+                        // تحديث حالة الفيدباك إلى "Reviewed"
+                        feedback.status = 'Reviewed';
+                        await feedback.save(); // حفظ التحديث في قاعدة البيانات
+                        feedbackUpdatedRequests.push(feedback); // إضافة الفيدباك الذي تم تحديثه
+                    }
+          
+        
+                // إرسال الاستجابة مع الطلبات والتقارير والفيدباك الذي تم تحديثه
+                return res.status(200).json({
+                    message: 'Pending requests and reports retrieved successfully!',
+                    requests: requestsForWorker,  // الطلبات التي حالتها "Pending"
+                    feedbacksUpdated: feedbackUpdatedRequests // الفيدباك الذي تم تحديثه إلى "Reviewed"
+                });
+        
+            } }
         
         else if (role === 'Owner') {
             try {
                 // استرجاع البريد الإلكتروني للمستخدم من التوكن
                 const userEmail = req.user.email;
         
-                // البحث عن صاحب الأرض باستخدام البريد الإلكتروني (وضعه في جدول المستخدمين أو الـ "users" إذا لم يكن موجودًا هناك)
+                // البحث عن صاحب الأرض باستخدام البريد الإلكتروني
                 const user = await Owner.findOne({ email: userEmail });
         
                 if (!user) {
                     return res.status(404).json({ message: 'User not found.' });
                 }
         
-                // البحث عن الطلبات الخاصة بصاحب الأرض والتي حالتها "Accepted" أو "Rejected"
+                // 1. البحث عن الطلبات الخاصة بصاحب الأرض والتي حالتها "Accepted" أو "Rejected"
                 const requestsForOwner = await requests.find({
                     ownerId: user._id,
-                    status: { $in: ['Accepted', 'Rejected'] }  // التصفية حسب حالة الطلب
+                    status: { $in: ['Accepted', 'Rejected'] } // التصفية حسب حالة الطلب
                 });
         
-                // التحقق إذا لم تكن هناك طلبات "Accepted" أو "Rejected"
-                if (!requestsForOwner.length) {
-                    return res.status(404).json({ message: 'No requests found for this landowner with Accepted or Rejected status.' });
+                // 2. البحث عن التقارير المرتبطة بصاحب الأرض بناءً على بريده الإلكتروني
+                const reportsForOwner = await DailyReport.find({
+                    owner_email: userEmail // البحث باستخدام بريد صاحب الأرض
+                });
+        
+                // التحقق إذا لم تكن هناك طلبات أو تقارير
+                if (!requestsForOwner.length && !reportsForOwner.length) {
+                    return res.status(404).json({ 
+                        message: 'No requests or reports found for this landowner.' 
+                    });
                 }
         
-                // إرسال الطلبات التي تم قبولها أو رفضها
+                // إرسال الطلبات والتقارير المرتبطة بصاحب الأرض
                 return res.status(200).json({
-                    message: 'Requests for your land with Accepted or Rejected status retrieved successfully.',
-                    requests: requestsForOwner
+                    message: 'Requests and reports for your land retrieved successfully.',
+                    requests: requestsForOwner, // الطلبات التي حالتها "Accepted" أو "Rejected"
+                    reports: reportsForOwner   // التقارير المرتبطة بصاحب الأرض
                 });
         
             } catch (error) {
                 console.error(error);
-                return res.status(500).json({ message: 'An error occurred while retrieving the requests.' });
+                return res.status(500).json({ message: 'An error occurred while retrieving the requests or reports.' });
             }
         }
+        
         
 
     } catch (error) {
@@ -773,8 +815,6 @@ const creatReport = async (req, res) => {
       res.status(500).json({ message: 'حدث خطأ أثناء إضافة التقرير', error: error.message });
     }
 };
-
-  
   const calculateAverageCompletion = async (land_id) => {
     const reports = await DailyReport.find({ land_id });
     if (reports.length === 0) return 0;
@@ -817,8 +857,78 @@ const creatReport = async (req, res) => {
   
     return { avgCompletion, reports };
   };
-        
+  const feedbacksystem = async (req, res) => {
+    const { feedback_id, status } = req.params; // الحصول على معرف الفيدباك والحالة
+    
+    // التحقق من أن الحالة هي "مقبولة" أو "مرفوضة"
+    if (status !== 'مقبولة' && status !== 'مرفوضة') {
+        return res.status(400).json({ message: 'الحالة غير صالحة. يجب أن تكون "مقبولة" أو "مرفوضة".' });
+    }
 
-  module.exports={toggleWorkStatus, creatReport,getLandsForGuarantor,
-    updateWorkerProfile,notification,respondToRequest,
-    announce,getLands,weathernotification,getAllAnnouncements,joinland}
+    try {
+      // البحث عن الفيدباك من قاعدة البيانات
+      const feedback = await OwnerFeedback.findById(feedback_id);
+      if (!feedback) {
+        return res.status(404).json({ message: 'الملاحظة غير موجودة.' });
+      }
+  
+      // استخراج report_id من الفيدباك
+      const { report_id } = feedback;
+  
+      // البحث عن التقرير باستخدام report_id
+      const report = await DailyReport.findById(report_id);
+      if (!report) {
+        return res.status(404).json({ message: 'التقرير غير موجود.' });
+      }
+  
+      // استخراج البريد الإلكتروني من التقرير
+      const reportOwnerEmail = report.reporter_email; // البريد الإلكتروني لصاحب التقرير
+  
+      // استخراج البريد الإلكتروني من التوكن
+      const token = req.header('authorization');
+      if (!token) {
+        return res.status(401).json({ message: 'التوكن مطلوب للمصادقة.' });
+      }
+      
+      const decodedToken = jwt.verify(token, JWT_SECRET_KEY); // فك التشفير
+      const { email: userEmail } = decodedToken;
+  
+      // التحقق من تطابق البريد الإلكتروني لصاحب التقرير مع البريد الإلكتروني من التوكن
+      if (reportOwnerEmail !== userEmail) {
+        return res.status(403).json({ message: 'ليس لديك صلاحية لفتح هذا الفيدباك.' });
+      }
+  
+      // تحديث الحالة إلى "مقبولة" أو "مرفوضة"
+      feedback.status = status; // تحديث الحالة استنادًا إلى القيمة التي تم إرسالها
+      await feedback.save(); // حفظ التحديث في قاعدة البيانات
+  
+      res.status(200).json({
+        message: `تم تحديث حالة الملاحظة إلى ${status} بنجاح.`,
+        feedback, // إرسال تفاصيل الفيدباك المحدثة
+      });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({
+        message: 'حدث خطأ أثناء استرجاع الملاحظة وتحديث حالتها.',
+        error: error.message,
+      });
+    }
+};
+
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  module.exports={ feedbacksystem,
+    toggleWorkStatus,creatReport,
+    getLandsForGuarantor,updateWorkerProfile,
+    notification,respondToRequest,
+    announce,getLands,weathernotification,
+    getAllAnnouncements,joinland}
