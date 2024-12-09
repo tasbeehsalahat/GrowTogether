@@ -23,7 +23,6 @@ router.post('/announcee',authenticateJWT,announce);
 router.patch('/update/:email',authenticateJWT,updateWorkerProfile);
 router.get('/showLands',authenticateJWT,getLands);
 
-// الراوتر لاستقبال التوكن وإرسال إشعار الطقس عبر البريد الإلكتروني
 router.post('/weather-notification',weathernotification);
 router.get('/notification',authenticateJWT,notification);
 router.get('/respondToRequest/:requestId/:status',authenticateJWT,respondToRequest);
