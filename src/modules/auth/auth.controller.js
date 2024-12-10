@@ -734,7 +734,38 @@ const logincompany = async (req, res) => {
         res.status(500).json({ message: "حدث خطأ أثناء تسجيل الدخول" });
     }
 };
+const signuptransporation=async (req, res) => {
+    const { companyName, email, phoneNumber, serviceType, location, password } = req.body;
+  
+    try {
+      // التحقق من المدخلات
+      if (!companyName || !email || !phoneNumber || !serviceType || !password) {
+        return res.status(400).json({ message: "الرجاء ملء جميع الحقول المطلوبة." });
+      }
+  
+      // إنشاء حساب جديد
+      const newCompany = new Company({
+        companyName,
+        email,
+        phoneNumber,
+        serviceType,
+        location,
+        password
+      });
+  
+      // حفظ الحساب في قاعدة البيانات
+      await newCompany.save();
+  
+      // إرسال الرد
+      res.status(201).json({ message: 'تم إنشاء حساب الشركة بنجاح!' });
+  
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: 'حدث خطأ أثناء التسجيل' });
+    }
+  };
 
-module.exports = {verifyResetCode,resetPassword, login, deactivationaccount,
+  
+module.exports = {verifyResetCode,signuptransporation,resetPassword, login, deactivationaccount,
     signupowner,signupWorker,profile,logout,sendconfirm,
     getconfirm,myprofile,deleteAccount,updatePassword,forgotPassword,logincompany,signupwstep2};

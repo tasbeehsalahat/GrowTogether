@@ -21,7 +21,8 @@ const { signupowner,profile,deactivationaccount, login,signupWorker,
   updateprofile,logout,getconfirm,sendconfirm,verifyResetCode,
   resetPassword,myprofile,deleteAccount,forgotPassword, updatePassword,
   logincompany,
-  signupwstep2} = require('../auth/auth.controller.js');
+  signupwstep2,
+  signuptransporation} = require('../auth/auth.controller.js');
 const router = express.Router();
 const rateLimit = require('express-rate-limit');
 const loginLimiter = rateLimit({
@@ -58,4 +59,5 @@ router.post('/confirm-account',getconfirm);
   router.patch('/deactiveaccount',authenticateJWT,deactivationaccount);
   router.post('/logincompany',logincompany);
   router.post('/register-step2/:workerId',signupwstep2);
+router.post('/signuptrans', signuptransporation);
 module.exports = router; 

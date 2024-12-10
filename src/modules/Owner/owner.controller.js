@@ -711,7 +711,7 @@ if(isguarntee){
 
         // ثالثاً: إذا لم يتم العثور على عمال، البحث باستخدام اسم المدينة
         if (workers.length === 0) {
-            workers = await Works.find({
+            workers = await works.find({
                 areas: { $regex: city, $options: 'i' },
                 isGuarantor: true, // إضافة الشرط مباشرة
 

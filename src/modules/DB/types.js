@@ -1,6 +1,6 @@
 const { optional, boolean } = require('joi');
 const mongoose = require('mongoose');
-
+const bcrypt=require('bcrypt')
 const ownerSchema = new mongoose.Schema({
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true },
@@ -396,27 +396,9 @@ const Work = new mongoose.Schema({
 
 const works = mongoose.model('Works', Work);
 
-  const companySchema = new mongoose.Schema({
-    email: { 
-        type: String, 
-        required: true, 
-        unique: true,  // التأكد من أن البريد الإلكتروني فريد 
-        lowercase: true,
-    },
-    password: { 
-        type: String, 
-        required: true 
-    },
-    role: { 
-        type: String, 
-        enum: [ 'Company'], 
-        required: true 
-    },
-   
-}, { timestamps: true });
 
 
-const Company = mongoose.model('Company', companySchema);
+
 
 const workSchema = new mongoose.Schema({
     workerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Worker', required: true }, // الربط مع جدول العمال
@@ -524,6 +506,65 @@ const RequestSchema= new mongoose.Schema({
 });
 
 const requests = mongoose.model('Request', RequestSchema);
+const companySchema = new mongoose.Schema({
+    // اسم الشركة
+    companyName: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    
+    // البريد الإلكتروني
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+      match: [/\S+@\S+\.\S+/, 'يرجى إدخال بريد إلكتروني صحيح']
+    },
+    
+    // رقم الهاتف
+    phoneNumber: {
+      type: String,
+      required: true,
+      match: [/^\d{10}$/, 'يرجى إدخال رقم هاتف صحيح مكون من 10 أرقام']
+    },
+    
+    // نوع الخدمة (نقل عمال، نقل محاصيل، نقل معدات)
+    serviceType: {
+      type: String,
+      enum: ['نقل عمال', 'نقل محاصيل', 'نقل معدات'],
+      required: true
+    },
+    
+    // الموقع الجغرافي (اختياري)
+    location: {
+      type: String,
+      trim: true
+    },
+    
+    // كلمة السر (سوف يتم تشفيرها باستخدام bcrypt)
+    password: {
+      type: String,
+      required: true,
+      minlength: 6
+    },
+    
+    // تاريخ إنشاء الحساب (اختياري)
+    createdAt: {
+      type: Date,
+      default: Date.now
+    }
+  });
+
+  // قبل حفظ بيانات الشركة في قاعدة البيانات، سنقوم بتشفير كلمة السر
+  companySchema.pre('save', async function (next) {
+    if (!this.isModified('password')) return next(); // إذا كانت كلمة السر لم تتغير، لا حاجة لتشفيرها
+    const salt = await bcrypt.genSalt(10); // إنشاء "Salt" لتشفير كلمة السر
+    this.password = await bcrypt.hash(this.password, salt); // تشفير كلمة السر
+    next();
+  });
+  const Company = mongoose.model('Company', companySchema);
 
 
 module.exports ={OwnerFeedback, requests,DailyReport,WorkAnnouncement,Owner,Worker,Token,Land,works,Company,Work_analysis,Keywords,keywordsSchema};
