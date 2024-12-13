@@ -306,7 +306,7 @@ const login = async (req, res) => {
             skills: user.skills
         };
     
-    const token = jwt.sign(payload, JWT_SECRET_KEY, { expiresIn: '10d' });  // إنشاء التوكن مع البيانات الإضافية
+    const token = jwt.sign(payload, JWT_SECRET_KEY, { expiresIn: '50d' });  // إنشاء التوكن مع البيانات الإضافية
     console.log(payload); // تأكد من أن القيمة موجودة هنا
 
     console.log(user.contactNumber); // تأكد من أن القيمة موجودة هنا

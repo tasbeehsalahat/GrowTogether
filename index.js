@@ -11,16 +11,74 @@ const worker=require('./src/modules/workers/worker.js')
 connectDB();
 app.use(express.json());
 
+// استيراد المكتبات الضرورية
+const axios = require('axios');
+
+// استخدام API key الخاص بك
+const API_KEY = 'Azhgd8l7rChAdvuvUJsPG8uSONBwZdSFHPrJrVW6uobu9GZk9idf9ahQRZBeyE58';
 app.use(express.static('public'));
 const cors = require('cors');
 const company = require('./src/modules/company/company.js');
 app.use(cors());
+const gOPD = require('./gOPD');
+console.log('Attempting to require ./gOPD');
+
 
  app.use('/auth', auth);
  app.use('/owner', owner);
 app.use('/company',company);
 app.use('/worker',worker);
 
+const url = 'https://api-v2.distancematrix.ai/maps/api/distancematrix/json';
+
+const params = {
+  origins: '51.4822656,-0.1933769',
+  destinations: '51.4994794,-0.1269979',
+  key: 'Azhgd8l7rChAdvuvUJsPG8uSONBwZdSFHPrJrVW6uobu9GZk9idf9ahQRZBeyE58'
+};
+
+axios.get(url, { params })
+  .then(response => {
+    console.log(response.data);
+  })
+  .catch(error => {
+    console.error('Error fetching data:', error);
+  });
+
+// إعداد نقطة نهاية API للحصول على الارتفاع
+app.get('/get-elevation', async (req, res) => {
+  // استخراج الإحداثيات من معلمات الاستعلام (query parameters)
+  const { lat, lon } = req.query;
+
+  // التحقق من وجود الإحداثيات
+  if (!lat || !lon) {
+      return res.status(400).send('يجب توفير إحداثيات خط العرض والطول');
+  }
+
+  try {
+      // إرسال طلب إلى API للحصول على الارتفاع
+      const response = await axios.get(`https://api-v2.distancematrix.ai/maps/api/distancematrix/json?origins=51.4822656,-0.1933769&destinations=51.4994794,-0.1269979&key=Azhgd8l7rChAdvuvUJsPG8uSONBwZdSFHPrJrVW6uobu9GZk9idf9ahQRZBeyE58`, {
+          params: {
+              locations: `${lat},${lon}`,
+              key: API_KEY,
+          },
+      });
+
+      // التحقق من استجابة البيانات
+      if (response.data.results && response.data.results.length > 0) {
+          const elevation = response.data.results[0].elevation;
+          res.json({ elevation });
+      } else {
+          res.status(404).send('لم يتم العثور على بيانات الارتفاع لهذه الإحداثيات');
+      }
+  } catch (error) {
+    console.log(error);
+      res.status(500).send('حدث خطأ أثناء الاتصال بـ API');
+  }
+});
 app.listen(2000, () => {
   console.log(`Server is running on porttttt ${PORT}`);
 });
+
+
+
