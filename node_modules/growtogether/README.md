@@ -1,2 +1,0 @@
-# GrowTogether
-graduation project
