@@ -20,8 +20,8 @@ app.use(express.static('public'));
 const cors = require('cors');
 const company = require('./src/modules/company/company.js');
 app.use(cors());
-const gOPD = require('./gOPD');
-console.log('Attempting to require ./gOPD');
+const gOPD = require('gopd');
+console.log('Attempting to require gOPD');
 
 
  app.use('/auth', auth);
