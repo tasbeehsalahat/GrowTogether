@@ -23,7 +23,6 @@ app.use(cors());
 const gOPD = require('gopd');
 console.log('Attempting to require gOPD');
 
-
  app.use('/auth', auth);
  app.use('/owner', owner);
 app.use('/company',company);
