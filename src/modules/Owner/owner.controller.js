@@ -233,6 +233,107 @@ cron.schedule('*/1 * * * *', async () => {
         console.error('Error in automatic advertisement:', error);
     }
 });
+const respondToGuaranteeRequest = async (req, res) => {
+    try {
+        console.log('Received request to respond to guarantee request.');
+
+        // استخرج التوكن من الهيدر
+        const token = req.header('authorization');
+        if (!token) {
+            console.log('No token provided.');
+            return res.status(401).json({ message: 'Authentication token is required.' });
+        }
+
+        // فك تشفير التوكن والتحقق منه
+        const decodedToken = jwt.verify(token, JWT_SECRET_KEY);
+        const { email, role } = decodedToken;
+
+        if (role !== 'Owner') {
+            return res.status(403).json({ message: 'Access denied. Only Owners can respond to guarantee requests.' });
+        }
+
+        let { requestId, status } = req.params;
+        requestId = requestId.replace(/^:/, '');
+        status = status.replace(/^:/, '');
+
+        if (!requestId || !status || (status !== 'accept' && status !== 'reject')) {
+            return res.status(400).json({ message: 'Invalid request. Request ID and valid status are required.' });
+        }
+
+        // العثور على الطلب بناءً على الـ requestId
+        const request = await requests.findById(requestId);
+        if (!request) {
+            return res.status(404).json({ message: 'Request not found.' });
+        }
+
+        // تحقق من أن الطلب مرتبط بالبريد الإلكتروني لصاحب الأرض
+        const { landId } = request;
+        if (!landId) {
+            return res.status(400).json({ message: 'Land ID is missing in the request.' });
+        }
+
+        const land = await Land.findById(landId);
+        if (!land) {
+            return res.status(404).json({ message: 'Land not found.' });
+        }
+
+        if (land.ownerEmail !== email) {
+            return res.status(403).json({ message: 'Access denied. This land does not belong to you.' });
+        }
+
+        // تحديث حالة الطلب بناءً على القرار
+        request.status = status === 'accept' ? 'Accepted' : 'Rejected';
+        request.ownerResponse = status === 'accept' ? 'Approved' : 'Rejected';
+
+        // تحديث حالة الأرض إذا تم قبول الطلب
+        if (status === 'accept') {
+            if (!land.isguarntee) {
+                return res.status(400).json({ message: 'This land is not marked for guarantee.' });
+            }
+
+            const guaranteeEndDate = new Date();
+            const guaranteeDuration = land.guaranteeDuration;
+
+            if (!guaranteeDuration) {
+                return res.status(400).json({ message: 'Guarantee duration is missing for this land.' });
+            }
+
+            const durationParts = guaranteeDuration.split(' ');
+            const durationValue = parseInt(durationParts[0]);
+            const durationUnit = durationParts[1]?.toLowerCase();
+
+            if (isNaN(durationValue) || !['month', 'أشهر', 'months', 'year', 'years'].includes(durationUnit)) {
+                return res.status(400).json({ message: 'Invalid guarantee duration format.' });
+            }
+
+            if (durationUnit.includes('month')) {
+                guaranteeEndDate.setMonth(guaranteeEndDate.getMonth() + durationValue);
+            } else if (durationUnit.includes('year')) {
+                guaranteeEndDate.setFullYear(guaranteeEndDate.getFullYear() + durationValue);
+            }
+
+            // تحديث الأرض
+            land.temporaryOwnerEmail = request.workerEmail; // تعيين العامل كمالك مؤقت
+            land.guaranteeEndDate = guaranteeEndDate; // تحديد تاريخ انتهاء الضمان
+            land.status = true;
+            land.advertisement = false;
+        }
+
+        // حفظ الطلب المحدث
+        await request.save();
+        // حفظ تحديث الأرض إذا لزم
+        await land.save();
+
+        // إرجاع استجابة مع الحالة الجديدة
+        return res.status(200).json({
+            message: `Guarantee request ${status}ed successfully.`,
+            request: request,
+        });
+    } catch (error) {
+        console.error('Error responding to guarantee request:', error);
+        return res.status(500).json({ message: 'Server error occurred.' });
+    }
+};
 
 
 const getAllLands = async (req, res) => {
@@ -896,63 +997,102 @@ const calculateWorkersForLand = async (req, res) => {
             return res.status(404).json({ message: 'Land not found or does not belong to the owner.' });
         }
 
-
-        let numberOfWorkers = 0;
         let workersPerArea = 0;
+        const area = land.area; // المساحة المطلوبة
+        const workType = land.workType; // نوع العمل
 
-        switch (land.workType) {
+        // تحديد الأدوات والمواد اللازمة لكل نوع عمل
+        let toolsAndMaterials = '';
+        let workDuration = ''; // الوقت التقديري
+        let costEstimate = 0; // التكلفة التقديرية
+
+        switch (workType) {
             case 'زراعة':
                 workersPerArea = 1 / 50; // 1 عامل لكل 50 متر مربع
+                toolsAndMaterials = 'أدوات الزراعة، بذور، أسمدة';
+                workDuration = 'من 1 إلى 2 أسبوع حسب المساحة';
+                costEstimate = area * 5; // تكلفة تقديرية لكل متر مربع (مثال)
                 break;
             case 'فلاحة':
                 workersPerArea = 1 / 60; // 1 عامل لكل 60 متر مربع
+                toolsAndMaterials = 'محاريث، آلات فلاحة';
+                workDuration = 'من 3 إلى 4 أيام';
+                costEstimate = area * 4; // تكلفة تقديرية
                 break;
             case 'تشجير':
                 workersPerArea = 1 / 70; // 1 عامل لكل 70 متر مربع
+                toolsAndMaterials = 'شجيرات، أدوات حفر';
+                workDuration = 'من 1 إلى 3 أسابيع';
+                costEstimate = area * 8; // تكلفة تقديرية
                 break;
             case 'تلقيط':
                 workersPerArea = 1 / 30; // 1 عامل لكل 30 متر مربع
+                toolsAndMaterials = 'سلال، معدات جمع';
+                workDuration = 'من 2 إلى 3 أيام';
+                costEstimate = area * 2; // تكلفة تقديرية
                 break;
             case 'حصاد':
                 workersPerArea = 1 / 40; // 1 عامل لكل 40 متر مربع
+                toolsAndMaterials = 'معدات حصاد، أكياس';
+                workDuration = 'من 1 إلى 2 أسبوع';
+                costEstimate = area * 6; // تكلفة تقديرية
                 break;
             case 'حراثة':
                 workersPerArea = 1 / 100; // 1 عامل لكل 100 متر مربع
+                toolsAndMaterials = 'محاريث، آلات حراثة';
+                workDuration = 'من 4 إلى 6 أيام';
+                costEstimate = area * 3; // تكلفة تقديرية
                 break;
             case 'تسميد':
                 workersPerArea = 1 / 100; // 1 عامل لكل 100 متر مربع
+                toolsAndMaterials = 'أسمدة، أدوات توزيع';
+                workDuration = 'من 2 إلى 3 أيام';
+                costEstimate = area * 2; // تكلفة تقديرية
                 break;
             case 'رش مبيدات حشرية':
                 workersPerArea = 1 / 50; // 1 عامل لكل 50 متر مربع
+                toolsAndMaterials = 'مبيدات حشرية، آلات رش';
+                workDuration = 'من 1 إلى 2 يوم';
+                costEstimate = area * 5; // تكلفة تقديرية
                 break;
             case 'اعداد بيوت بلاستيكية':
                 workersPerArea = 1 / 20; // 1 عامل لكل 20 متر مربع
+                toolsAndMaterials = 'أغطية بلاستيكية، أدوات تثبيت';
+                workDuration = 'من 5 إلى 7 أيام';
+                costEstimate = area * 10; // تكلفة تقديرية
                 break;
             case 'نقل محاصيل':
                 workersPerArea = 1 / 40; // 1 عامل لكل 40 متر مربع
+                toolsAndMaterials = 'أدوات نقل، صناديق';
+                workDuration = 'من 3 إلى 5 أيام';
+                costEstimate = area * 7; // تكلفة تقديرية
                 break;
             default:
                 return res.status(400).json({ message: 'Invalid work type.' });
         }
 
         // حساب عدد العمال بناءً على المساحة
-        numberOfWorkers = Math.ceil(land.area * workersPerArea);
+        const requiredWorkers = Math.ceil(area * workersPerArea);
 
-        return res.status(200).json({
-            message: 'Number of workers calculated successfully.',
-            landId: land._id,
-            numberOfWorkers: numberOfWorkers,
-            landDescription: land.description,
-            workType: land.workType,
-            formattedAddress: land.formattedAddress,
-            googleMapsLink: land.googleMapsLink
-        });
+        // التحليل النهائي
+        const landAnalysis = {
+            requiredWorkers,
+            workType,
+            toolsAndMaterials,
+            workDuration,
+            costEstimate,
+            area
+        };
+
+        return res.status(200).json(landAnalysis);
 
     } catch (error) {
         console.error('Error calculating workers:', error);
         return res.status(500).json({ message: 'Server error occurred.' });
     }
 };
+
+
 const createWorkAnnouncement = async (req, res) => {
     try {
         const token = req.header('authorization'); // استخراج التوكن من الهيدر
@@ -1270,5 +1410,5 @@ module.exports={feedback,createRequest,pending,
     showLand ,createWorkAnnouncement
     ,calculateWorkersForLand,getAllLands,
     getguarntors, addLanddaily,updateLand,
-    deleteLand,addLand,getLandbyid,
+    deleteLand,addLand,getLandbyid,respondToGuaranteeRequest,
     updateOwnerProfile,getLandAdvertisement}

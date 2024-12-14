@@ -1,33 +1,34 @@
-const express = require('express');
-const connectDB = require('./src/modules/DB/connection.js'); // Import the connectDB function
-const dotenv = require('dotenv');
+import express from 'express';
+import connectDB from './src/modules/DB/connection.js'; // Import the connectDB function
+import dotenv from 'dotenv';
 dotenv.config();
+import auth from './src/modules/auth/auth.js';
+import owner from './src/modules/Owner/owner.js';
+import worker from './src/modules/workers/worker.js';
+import chat from './src/modules/chat/chat.js';
+import axios from 'axios';
+import cors from 'cors';
+import company from './src/modules/company/company.js';
+
+// Initialize app
 const app = express();
 const PORT = 3000;
-const router = express.Router();
-const auth = require('./src/modules/auth/auth.js');
-const owner = require('./src/modules/Owner/owner.js');
-const worker=require('./src/modules/workers/worker.js')
-connectDB();
 app.use(express.json());
-
-// استيراد المكتبات الضرورية
-const axios = require('axios');
-
-// استخدام API key الخاص بك
-const API_KEY = 'Azhgd8l7rChAdvuvUJsPG8uSONBwZdSFHPrJrVW6uobu9GZk9idf9ahQRZBeyE58';
 app.use(express.static('public'));
-const cors = require('cors');
-const company = require('./src/modules/company/company.js');
 app.use(cors());
 
- app.use('/auth', auth);
- app.use('/owner', owner);
-app.use('/company',company);
-app.use('/worker',worker);
+// Connect to database
+connectDB();
 
+// Routes
+app.use('/auth', auth);
+app.use('/owner', owner);
+app.use('/company', company);
+app.use('/worker', worker);
+app.use('/chat', chat);
+
+// API Request Example
 const url = 'https://api-v2.distancematrix.ai/maps/api/distancematrix/json';
-
 const params = {
   origins: '51.4822656,-0.1933769',
   destinations: '51.4994794,-0.1269979',
@@ -42,40 +43,75 @@ axios.get(url, { params })
     console.error('Error fetching data:', error);
   });
 
-// إعداد نقطة نهاية API للحصول على الارتفاع
+// Endpoint to get elevation data
 app.get('/get-elevation', async (req, res) => {
-  // استخراج الإحداثيات من معلمات الاستعلام (query parameters)
   const { lat, lon } = req.query;
-
-  // التحقق من وجود الإحداثيات
   if (!lat || !lon) {
-      return res.status(400).send('يجب توفير إحداثيات خط العرض والطول');
+    return res.status(400).send('يجب توفير إحداثيات خط العرض والطول');
   }
 
   try {
-      // إرسال طلب إلى API للحصول على الارتفاع
-      const response = await axios.get(`https://api-v2.distancematrix.ai/maps/api/distancematrix/json?origins=51.4822656,-0.1933769&destinations=51.4994794,-0.1269979&key=Azhgd8l7rChAdvuvUJsPG8uSONBwZdSFHPrJrVW6uobu9GZk9idf9ahQRZBeyE58`, {
-          params: {
-              locations: `${lat},${lon}`,
-              key: API_KEY,
-          },
-      });
+    const response = await axios.get(`https://api-v2.distancematrix.ai/maps/api/distancematrix/json?origins=51.4822656,-0.1933769&destinations=51.4994794,-0.1269979&key=Azhgd8l7rChAdvuvUJsPG8uSONBwZdSFHPrJrVW6uobu9GZk9idf9ahQRZBeyE58`, {
+      params: {
+        locations: `${lat},${lon}`,
+        key: 'Azhgd8l7rChAdvuvUJsPG8uSONBwZdSFHPrJrVW6uobu9GZk9idf9ahQRZBeyE58',
+      },
+    });
 
-      // التحقق من استجابة البيانات
-      if (response.data.results && response.data.results.length > 0) {
-          const elevation = response.data.results[0].elevation;
-          res.json({ elevation });
-      } else {
-          res.status(404).send('لم يتم العثور على بيانات الارتفاع لهذه الإحداثيات');
-      }
+    if (response.data.results && response.data.results.length > 0) {
+      const elevation = response.data.results[0].elevation;
+      res.json({ elevation });
+    } else {
+      res.status(404).send('لم يتم العثور على بيانات الارتفاع لهذه الإحداثيات');
+    }
   } catch (error) {
     console.log(error);
-      res.status(500).send('حدث خطأ أثناء الاتصال بـ API');
+    res.status(500).send('حدث خطأ أثناء الاتصال بـ API');
   }
 });
-app.listen(2000, () => {
-  console.log(`Server is running on porttttt ${PORT}`);
+const fetchSoilData = async (latitude, longitude) => {
+  try {
+    const response = await fetch(`https://soilgrids.org/api/v1/query?lat=${latitude}&lon=${longitude}`);
+
+    // تحقق مما إذا كانت الاستجابة سليمة (HTTP 200)
+    if (!response.ok) {
+      throw new Error('فشل في الاتصال بـ API: ' + response.status);
+    }
+
+    const data = await response.json();
+
+    // تحقق من أن البيانات التي تم استلامها تحتوي على المعلومات المطلوبة
+    if (!data.soil_type) {
+      throw new Error('البيانات المستلمة لا تحتوي على معلومات التربة');
+    }
+
+    const soilType = data.soil_type;  // نوع التربة
+    const soilMoisture = data.moisture; // نسبة الرطوبة
+    const soilPh = data.ph;  // الرقم الهيدروجيني (pH)
+
+    return {
+      soilType,
+      soilMoisture,
+      soilPh
+    };
+  } catch (error) {
+    console.error('حدث خطأ: ', error.message);
+    throw error;  // إعادة رمي الخطأ لالتقاطه في مكان آخر إذا لزم الأمر
+  }
+};
+
+// مثال على استخدام الإحداثيات لموقع الأرض
+const coordinates = { latitude: 31.8792891, longitude: 35.2194358 };
+
+fetchSoilData(coordinates.latitude, coordinates.longitude)
+  .then(soilData => {
+    console.log(soilData);
+  })
+  .catch(error => {
+    console.error('فشل في جلب بيانات التربة:', error);
+  });
+
+// Start server
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
 });
-
-
-

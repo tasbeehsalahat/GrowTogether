@@ -16,7 +16,6 @@ const ownerSchema = new mongoose.Schema({
 const Owner = mongoose.model('Owner', ownerSchema);
 
 
-// قائمة المهارات المسموح بها
 const allowedSkills = [
     'خبرة في الحراثة',
     'خبرة بالآلات الزراعية',
@@ -231,8 +230,8 @@ const landSchema = new mongoose.Schema({
     },
     location: {
         type: {
-            latitude: { type: Number, required: true }, // خط العرض
-            longitude: { type: Number, required: true }, // خط الطول
+            latitude: { type: Number, required: true },
+            longitude: { type: Number, required: true },
         },
         required: true, // تأكد من وجود الموقع دائمًا
     },
@@ -360,19 +359,16 @@ const Work = new mongoose.Schema({
         type: [String], 
         required: true,
     },
-    location: {
+    location: { // تعديل هذا الحقل ليكون GeoJSON
         type: {
-            latitude: { type: Number, required: true },
-            longitude: { type: Number, required: true },
+            type: String,
+            enum: ['Point'],  // تحديد نوع النقطة الجغرافية
+            required: true
         },
-        required: true,
-    },
-    coordinates: {
-        type: {
-            lat: { type: Number, required: true },
-            lng: { type: Number, required: true },
-        },
-        required: true,
+        coordinates: {  // إحداثيات الموقع
+            type: [Number],  // [longitude, latitude]
+            required: true
+        }
     },
     email: {
         type: String, 
@@ -506,65 +502,107 @@ const RequestSchema= new mongoose.Schema({
 });
 
 const requests = mongoose.model('Request', RequestSchema);
-const companySchema = new mongoose.Schema({
-    // اسم الشركة
-    companyName: {
-      type: String,
-      required: true,
-      trim: true
-    },
-    
-    // البريد الإلكتروني
-    email: {
-      type: String,
-      required: true,
-      unique: true,
-      lowercase: true,
-      match: [/\S+@\S+\.\S+/, 'يرجى إدخال بريد إلكتروني صحيح']
-    },
-    
-    // رقم الهاتف
-    phoneNumber: {
-      type: String,
-      required: true,
-      match: [/^\d{10}$/, 'يرجى إدخال رقم هاتف صحيح مكون من 10 أرقام']
-    },
-    
-    // نوع الخدمة (نقل عمال، نقل محاصيل، نقل معدات)
-    serviceType: {
-      type: String,
-      enum: ['نقل عمال', 'نقل محاصيل', 'نقل معدات'],
-      required: true
-    },
-    
-    // الموقع الجغرافي (اختياري)
-    location: {
-      type: String,
-      trim: true
-    },
-    
-    // كلمة السر (سوف يتم تشفيرها باستخدام bcrypt)
-    password: {
-      type: String,
-      required: true,
-      minlength: 6
-    },
-    
-    // تاريخ إنشاء الحساب (اختياري)
-    createdAt: {
-      type: Date,
-      default: Date.now
-    }
-  });
 
-  // قبل حفظ بيانات الشركة في قاعدة البيانات، سنقوم بتشفير كلمة السر
-  companySchema.pre('save', async function (next) {
-    if (!this.isModified('password')) return next(); // إذا كانت كلمة السر لم تتغير، لا حاجة لتشفيرها
-    const salt = await bcrypt.genSalt(10); // إنشاء "Salt" لتشفير كلمة السر
-    this.password = await bcrypt.hash(this.password, salt); // تشفير كلمة السر
-    next();
-  });
+// تعريف الـ Schema للشركة
+const companySchema = new mongoose.Schema({
+    companyName: {
+        type: String,
+        required: true,
+    },
+    companyType: {
+        type: String,
+        enum: ['نقل', 'معصرة', 'أسمدة وبذور', 'مطحنة'], // تحديد الأنواع المتاحة
+        required: true,
+    },
+    location: {
+        type: String,
+        required: true,
+    },
+    contactInfo: {
+        phone: {
+            type: String,
+            required: true,
+        },
+        email: {
+            type: String,
+            required: true,
+            unique: true,
+        }
+    },
+    workingHours: {
+        type: String,
+        required: true,
+    },
+    password: {
+        type: String,
+        required: true,
+    },
+    additionalFields: {
+        serviceType: {
+            type: String,
+            required: function() { return this.companyType === 'نقل'; },
+        },
+        serviceRange: {
+            type: String,
+            required: function() { return this.companyType === 'نقل'; },
+        },
+        transportCost: {
+            type: String,
+            required: function() { return this.companyType === 'نقل'; },
+        },
+        availableVehicles: {
+            type: String,
+            required: function() { return this.companyType === 'نقل'; },
+        },
+        pressCapacity: {
+            type: Number,
+            required: function() { return this.companyType === 'معصرة'; },
+        },
+        pressCost: {
+            type: String,
+            required: function() { return this.companyType === 'معصرة'; },
+        },
+        additionalServices: {
+            type: String,
+            required: function() { return this.companyType === 'معصرة'; },
+        },
+        productType: {
+            type: String,
+            required: function() { return this.companyType === 'أسمدة وبذور'; },
+        },
+        minOrder: {
+            type: String,
+            required: function() { return this.companyType === 'أسمدة وبذور'; },
+        },
+        deliveryOptions: {
+            type: String,
+            required: function() { return this.companyType === 'أسمدة وبذور'; },
+        },
+        grainTypes: {
+            type: String,
+            required: function() { return this.companyType === 'مطحنة'; },
+        },
+        millingCost: {
+            type: String,
+            required: function() { return this.companyType === 'مطحنة'; },
+        },
+        millCapacity: {
+            type: Number,
+            required: function() { return this.companyType === 'مطحنة'; },
+        }
+    },
+});
   const Company = mongoose.model('Company', companySchema);
 
+  const messageSchema = new mongoose.Schema({
+    landId: { type: mongoose.Schema.Types.ObjectId, required: true, ref: "Land" },
+    senderId: { type: String, required: true },  // معرف صاحب الأرض
+    receiverId: { type: String, required: true },  // معرف الضامن
+    message: { type: String, required: true },
+    timestamp: { type: Date, default: Date.now },
+    isRead: { type: Boolean, default: false }
+});
 
-module.exports ={OwnerFeedback, requests,DailyReport,WorkAnnouncement,Owner,Worker,Token,Land,works,Company,Work_analysis,Keywords,keywordsSchema};
+const Chat = mongoose.model("Message", messageSchema);
+
+module.exports ={OwnerFeedback,Chat, requests,DailyReport,WorkAnnouncement,Owner,Worker,Token,Land,works,Company,Work_analysis,Keywords,keywordsSchema};

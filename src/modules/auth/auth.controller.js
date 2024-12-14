@@ -3,10 +3,9 @@ const multer = require('multer');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken'); 
 const {signupSchema,workerSignupSchema,loginSchema} = require('../valdition/vald.js');
-const {Owner,Worker,Token} = require('../DB/types.js');  // تأكد من أن المسار صحيح
+const {Owner,Worker,Company,Token} = require('../DB/types.js');  // تأكد من أن المسار صحيح
 const JWT_SECRET_KEY = '1234#';  // نفس المفتاح السري الذي ستستخدمه للتحقق من التوكن
 const nodemailer = require('nodemailer');
-const { Company } = require('../DB/types.js');
 
 const generateRandomCode = () => {
     return Math.floor(100000 + Math.random() * 900000); // توليد رقم عشوائي مكون من 6 أرقام
@@ -764,8 +763,87 @@ const signuptransporation=async (req, res) => {
       res.status(500).json({ message: 'حدث خطأ أثناء التسجيل' });
     }
   };
+  const signupcompany = async (req, res) => {
+    const { companyType, companyName, location, contactInfo, workingHours, additionalFields, password } = req.body;
 
-  
+    // التأكد من وجود نوع الشركة وكلمة السر
+    if (!companyType) {
+        return res.status(400).json({ error: 'نوع الشركة مطلوب' });
+    }
+
+    if (!password) {
+        return res.status(400).json({ error: 'كلمة السر مطلوبة' });
+    }
+
+    if (!contactInfo || !contactInfo.email || !contactInfo.phone) {
+        return res.status(400).json({ error: 'معلومات الاتصال (البريد الإلكتروني والهاتف) مطلوبة' });
+    }
+
+    let requiredFields = [];
+
+    // تحديد الحقول المطلوبة بناءً على نوع الشركة
+    switch (companyType) {
+        case 'نقل':
+            requiredFields = ['serviceType', 'serviceRange', 'transportCost', 'availableVehicles'];
+            break;
+        case 'معصرة':
+            requiredFields = ['pressCapacity', 'pressCost', 'additionalServices'];
+            break;
+        case 'أسمدة وبذور':
+            requiredFields = ['productType', 'minOrder', 'deliveryOptions'];
+            break;
+        case 'مطحنة':
+            requiredFields = ['grainTypes', 'millingCost', 'millCapacity'];
+            break;
+        default:
+            return res.status(400).json({ error: 'نوع الشركة غير معروف' });
+    }
+
+    // التحقق من الحقول المفقودة
+    for (let field of requiredFields) {
+        if (!additionalFields || !additionalFields[field]) {
+            return res.status(400).json({ error: `${field} مطلوب` });
+        }
+    }
+
+    // تشفير كلمة السر باستخدام bcrypt
+    try {
+        const hashedPassword = await bcrypt.hash(password, 10);  // استخدام bcrypt لتشفير كلمة السر
+        
+        // إنشاء كائن جديد من شركة
+        const company = new Company({
+            companyType,
+            companyName,
+            location,
+            contactInfo,  // تأكد من تمرير معلومات الاتصال هنا
+            workingHours,
+            additionalFields,
+            password: hashedPassword,  // تعيين كلمة السر المشفرة
+        });
+
+        // حفظ الشركة في قاعدة البيانات
+        await company.save();
+
+        // إنشاء الحساب بنجاح
+        res.status(200).json({
+            message: 'تم إنشاء الحساب بنجاح',
+            companyData: {
+                companyType,
+                companyName,
+                location,
+                contactInfo,
+                workingHours,
+                additionalFields,
+                password: hashedPassword,  // عرض كلمة السر المشفرة
+            },
+        });
+    } catch (error) {
+        console.log(error);
+        return res.status(500).json({ error: 'فشل في تشفير كلمة السر' });
+    }
+};
+
+
 module.exports = {verifyResetCode,signuptransporation,resetPassword, login, deactivationaccount,
-    signupowner,signupWorker,profile,logout,sendconfirm,
+    signupowner,signupWorker,profile,logout,sendconfirm,signupcompany,
     getconfirm,myprofile,deleteAccount,updatePassword,forgotPassword,logincompany,signupwstep2};

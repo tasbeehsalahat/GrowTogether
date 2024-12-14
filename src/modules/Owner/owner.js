@@ -7,7 +7,8 @@ const {authenticateJWT}=require('../middleware/middleware.js');
 const { addLand, getAllLands,updateLand, deleteLand, getLandbyid, updateOwnerProfile, 
     getLandAdvertisement, addLanddaily, getguarntors, calculateWorkersForLand,
      createWorkAnnouncement, showLand, createRequest, 
-     feedback} = require('./owner.controller.js');
+     feedback,
+     respondToGuaranteeRequest} = require('./owner.controller.js');
 router.get('/getmylands',authenticateJWT,getAllLands);
 router.patch('/updatemyland/:landId',authenticateJWT,updateLand);
 router.delete('/deletemylands/:landid',authenticateJWT,deleteLand);
@@ -65,6 +66,7 @@ router.get('/report/:land_id', async (req, res) => {
     res.status(500).json({ message: 'حدث خطأ أثناء استرجاع التقرير', error: error.message });
   }
 });
+router.post('/respond/:requestId/:status',authenticateJWT,respondToGuaranteeRequest);
 
 
 

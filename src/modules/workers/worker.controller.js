@@ -7,7 +7,7 @@ const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
 const cron = require('node-cron'); 
 const moment = require('moment');
-const {Owner,Worker,DailyReport,OwnerFeedback,Land,works,requests,WorkAnnouncement} = require('../DB/types.js');  // تأكد من أن المسار صحيح
+const {Owner,Worker,DailyReport,OwnerFeedback,Chat,Land,works,requests,WorkAnnouncement} = require('../DB/types.js');  // تأكد من أن المسار صحيح
 const JWT_SECRET_KEY = '1234#';  // نفس المفتاح السري الذي ستستخدمه للتحقق من التوكن
 const updateWorkerProfile = async (req, res) => {
     try {
@@ -55,11 +55,13 @@ const updateWorkerProfile = async (req, res) => {
 };
 const announce = async (req, res) => {
     try {
+        // التحقق من وجود التوكن
         const token = req.header("authorization");
         if (!token) {
             return res.status(401).json({ message: "Authentication token is required." });
         }
 
+        // فك تشفير التوكن والتحقق من صحته
         let decodedToken;
         try {
             decodedToken = jwt.verify(token, JWT_SECRET_KEY);
@@ -75,7 +77,7 @@ const announce = async (req, res) => {
 
         const { email, role } = decodedToken;
 
-        // تحقق من الدور
+        // تحقق من الدور (يجب أن يكون العامل فقط)
         if (role !== "Worker") {
             return res.status(403).json({ message: "Access denied. Only Workers can announce jobs." });
         }
@@ -86,24 +88,33 @@ const announce = async (req, res) => {
             return res.status(404).json({ message: "Worker not found." });
         }
 
-        // استخراج البيانات من العامل
+        // استخراج بيانات العامل
         const { _id, skills, contactNumber, tools, isGuarantor, street, city, town, areas } = worker;
 
-        // بيانات العمل من الطلب
+        // التأكد من وجود بيانات العمل في الطلب
         const { availableDays, hourlyRate } = req.body;
+        if (!availableDays || !hourlyRate) {
+            return res.status(400).json({ message: "Missing required work data (availableDays or hourlyRate)." });
+        }
 
         // تجميع العنوان
         const address = `${street}, ${city}, ${town}, palestine`;
         const apiKey = "AlzaSy6XpmiefdiJmjZyZJVslxex6jWWjzxkmrn"; // مفتاح API
         const geocodeUrl = `https://maps.gomaps.pro/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${apiKey}`;
+        
+        // استدعاء API للحصول على الإحداثيات
         const response = await axios.get(geocodeUrl);
-
         if (response.data.status !== "OK") {
             return res.status(400).json({ message: "Unable to find location.", error: response.data.error_message });
         }
 
         const { lat, lng } = response.data.results[0].geometry.location;
         const formattedAddress = response.data.results[0].formatted_address;
+
+        // التحقق من صحة الإحداثيات
+        if (!lat || !lng) {
+            return res.status(400).json({ message: "Invalid coordinates returned from Geocoding API." });
+        }
 
         // إنشاء مستند جديد للعمل
         const newWork = new works({
@@ -114,8 +125,8 @@ const announce = async (req, res) => {
             hourlyRate,
             areas,
             location: {
-                latitude: lat,
-                longitude: lng
+                type: "Point",
+                coordinates: [lng, lat] // ترتيب الإحداثيات [longitude, latitude]
             },
             coordinates: {
                 lat,
@@ -137,9 +148,10 @@ const announce = async (req, res) => {
         });
     } catch (error) {
         console.error('Error in adding the announcement:', error);
-        res.status(500).json({ message: 'Server error occurred.' });
+        res.status(500).json({ message: 'Server error occurred.', error: error.message });
     }
 };
+
 const getLands = async (req, res) => {
     try {
         const token = req.header('authorization'); // استخراج التوكن من الهيدر
@@ -176,7 +188,8 @@ const getLands = async (req, res) => {
                 { town: { $regex: town, $options: 'i' } },
                 { city: { $regex: city, $options: 'i' } }
             ],
-            isguarntee: true
+            isguarntee: true,
+            status:false
         });
 
         const workAnnouncements = await WorkAnnouncement.find({
@@ -389,7 +402,7 @@ const notification = async (req, res) => {
                 // 1. البحث عن الطلبات الخاصة بالعامل والتي حالتها "Pending"
                 const requestsForWorker = await requests.find({
                     workerEmail: userEmail, // التصفية باستخدام البريد الإلكتروني للعامل
-                    status: 'Pending' // التصفية حسب حالة الطلب
+                    status: { $in: ['Accepted', 'Rejected','Pending'] } // التصفية حسب حالة الطلب
                 })
                 .populate('landId') // جلب كافة تفاصيل الأرض المرتبطة بالطلب
                 .populate('ownerId', 'email name'); // جلب بيانات المالك (البريد الإلكتروني والاسم)
@@ -445,7 +458,7 @@ const notification = async (req, res) => {
                 // 1. البحث عن الطلبات الخاصة بصاحب الأرض والتي حالتها "Accepted" أو "Rejected"
                 const requestsForOwner = await requests.find({
                     ownerId: user._id,
-                    status: { $in: ['Accepted', 'Rejected'] } // التصفية حسب حالة الطلب
+                    status: { $in: ['Accepted', 'Rejected','Pending'] } // التصفية حسب حالة الطلب
                 });
         
                 // 2. البحث عن التقارير المرتبطة بصاحب الأرض بناءً على بريده الإلكتروني
@@ -673,7 +686,6 @@ const getLandsForGuarantor = async (req, res) => {
         
         console.log('Worker found:', worker);
 
-        // تحقق إذا كان العامل هو ضامن عبر فحص حقل "isGuarantor"
         if (!worker.isGuarantor) {
             console.log('The worker is not a guarantor.');
             return res.status(403).json({ message: 'You are not a guarantor.' });
@@ -682,7 +694,7 @@ const getLandsForGuarantor = async (req, res) => {
        
 
         const lands = await Land.find({
-            temporaryOwnerEmail:"s120276399@stu.najah.edu" // البحث عن الأراضي التي الضامن هو المؤقت لها
+            temporaryOwnerEmail:email // البحث عن الأراضي التي الضامن هو المؤقت لها
         }).exec();
         console.log(lands);
         if (lands.length === 0) {
@@ -915,18 +927,177 @@ const creatReport = async (req, res) => {
     }
 };
 
+// كرون لإنشاء المحادثات
+cron.schedule("*/5 * * * *", async () => {
+    try {
+        // جلب جميع الأراضي المضمونة وحالتها true
+        const lands = await Land.find({ isguarntee: true, status: true });
+
+        for (const land of lands) {
+            // التحقق من وجود المحادثة بالفعل
+            const existingChat = await Chat.findOne({ landId: land._id });
+
+            if (!existingChat) {
+                try {
+                    // التحقق من وجود البريد الإلكتروني للمالك والضامن
+                    if (!land.ownerEmail || !land.temporaryOwnerEmail) {
+                        console.error(
+                            `Missing ownerEmail or temporaryOwnerEmail for land ID: ${land._id}`
+                        );
+                        continue; // تجاوز الأرض الحالية إذا كانت البيانات ناقصة
+                    }
+
+                    // إنشاء محادثة جديدة
+                    const newChat = new Chat({
+                        participants: [
+                            land.ownerEmail, // البريد الإلكتروني للمالك
+                            land.temporaryOwnerEmail, // البريد الإلكتروني للضامن
+                        ],
+                        landId: land._id, // ربط المحادثة بالأرض
+                        messages: [
+                            {
+                                senderId: land.ownerEmail, // معرف المالك
+                                receiverId: land.temporaryOwnerEmail, // معرف الضامن
+                                message: `مرحبًا، تم إنشاء محادثة جديدة بخصوص ضمان الأرض "${land.description}" الواقعة في "${land.formattedAddress}".`,
+                                timestamp: new Date(),
+                            },
+                        ],
+                    });
+
+                    // حفظ المحادثة الجديدة
+                    await newChat.save();
+                    console.log(`Chat created successfully for land ID: ${land._id}`);
+                } catch (error) {
+                    console.error(
+                        `Error creating chat for land ID: ${land._id}:`,
+                        error.message
+                    );
+                }
+            }
+        }
+
+        console.log("Checked guaranteed lands and created chats if necessary.");
+    } catch (error) {
+        console.error("Error checking guaranteed lands:", error.message);
+    }
+});
+const search = async (req, res) => {
+    try {
+        const token = req.header('authorization');
+        if (!token) {
+            return res.status(401).json({ message: 'التوكن مطلوب للمصادقة.' });
+        }
+
+        const decodedToken = jwt.verify(token, JWT_SECRET_KEY);
+        const { email: user_email } = decodedToken;
+
+        const { landId } = req.params; // ID الأرض المراد البحث عن عمال لها
+        if (!landId) {
+            return res.status(400).json({ success: false, message: "الرجاء تزويد رقم الأرض." });
+        }
+
+        const land = await Land.findById(landId);
+        if (!land) {
+            return res.status(400).json({ success: false, message: "إحداثيات الأرض غير متوفرة." });
+        }
+
+        // التحقق من تطابق البريد الإلكتروني مع صاحب الأرض
+        if (land.temporaryOwnerEmail !== user_email) {
+            return res.status(403).json({ message: 'البريد الإلكتروني لا يتطابق مع صاحب الأرض' });
+        }
+
+        const { location, workType, streetName, town, city } = land; // استخراج الإحداثيات ونوع العمل وأسماء الأماكن
+
+        if (!workType) {
+            return res.status(400).json({ success: false, message: "نوع العمل غير محدد في الأرض." });
+        }
+
+        const { latitude, longitude } = location; // استخراج الإحداثيات بشكل صحيح
+
+        let workers = []; // مصفوفة لتخزين العمال
+
+        // أولاً: البحث باستخدام اسم الشارع
+        workers = await works.find({
+            areas: { $regex: streetName, $options: 'i' }        
+        });
+
+        // ثانياً: إذا لم يتم العثور على عمال، البحث باستخدام اسم البلدة
+        if (workers.length === 0) {
+            workers = await works.find({
+                areas: { $regex: town, $options: 'i' }
+            });
+        }
+
+        // ثالثاً: إذا لم يتم العثور على عمال، البحث باستخدام اسم المدينة
+        if (workers.length === 0) {
+            workers = await works.find({
+                areas: { $regex: city, $options: 'i' }
+            });
+        }
+
+        // رابعاً: إذا لم يتم العثور على عمال، البحث باستخدام عدة شروط (الشارع، البلدة، المدينة)
+        if (workers.length === 0) {
+            workers = await works.find({
+                $or: [
+                    { areas: { $regex: streetName, $options: 'i' } },
+                    { areas: { $regex: town, $options: 'i' } },
+                    { areas: { $regex: city, $options: 'i' } },
+                ],
+                ...(isguarntee ? { isguarntee: true } : {}), // إضافة شرط الضمان إذا كان موجودًا
+            });
+        }
+
+        // إذا لم يتم العثور على عمال باستخدام الموقع الجغرافي
+        if (workers.length === 0) {
+            // البحث باستخدام الموقع الجغرافي فقط إذا لم تجد عمال باستخدام الأماكن السابقة
+            workers = await Worker.aggregate([
+                {
+                    $geoNear: {
+                        near: { type: "Point", coordinates: [longitude, latitude] }, 
+                        distanceField: "distance", 
+                        spherical: true, 
+                        maxDistance: 10000, 
+                        query: {
+                            status: "Available", 
+                            $or: [
+                                { skills: { $in: [workType] } },
+                                { tools: { $in: [workType] } }
+                            ]
+                        }
+                    }
+                },
+                { $limit: 20 }
+            ]);
+        }
+
+        // إذا لم يتم العثور على عمال بعد جميع الفحوصات
+        if (workers.length === 0) {
+            return res.status(404).json({ message: 'لا يوجد عمال قريبين لهذه الأرض.' });
+        }
+
+        // فلترة العمال حسب المهارات والأدوات
+        const filteredWorkers = workers.filter(worker => {
+            return (worker.skills.includes(workType) || worker.tools.includes(workType));
+        });
+
+        // إرجاع العمال المفلترين
+        return res.status(200).json(filteredWorkers);
+
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({
+            success: false,
+            message: "حدث خطأ غير متوقع",
+            error: error.message || error
+        });
+    }
+};
+
   
   
   
   
-  
-  
-  
-  
-  
-  
-  
-  module.exports={ feedbacksystem,
+  module.exports={ feedbacksystem,search,
     toggleWorkStatus,creatReport,
     getLandsForGuarantor,updateWorkerProfile,
     notification,respondToRequest,
