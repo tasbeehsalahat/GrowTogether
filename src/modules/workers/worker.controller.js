@@ -3,7 +3,10 @@ const axios=require('axios');
 const mongoose = require('mongoose');
 const multer = require('multer');
 
-const jwt = require('jsonwebtoken'); 
+const PDFDocument = require('pdfkit');
+const fs = require('fs');
+const path = require('path');
+const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
 const cron = require('node-cron'); 
 const moment = require('moment');
@@ -337,7 +340,7 @@ const sendWeatherNotification = async (latitude, longitude, userEmail) => {
             weatherMessage = `☀️ الطقس معتدل ومناسب للعمل. درجة الحرارة: ${temperature}°C.`;
         }
 
-        // إرسال البريد الإلكتروني
+console.log(weatherMessage);
         await sendEmailNotification(userEmail, 'تنبيه الطقس الزراعي', weatherMessage);
     } catch (error) {
         console.error('Error sending weather notification:', error.message);
@@ -740,13 +743,76 @@ const toggleWorkStatus = async (req, res) => {
     res.status(500).json({ message: 'حدث خطأ أثناء العملية' });
   }
 };
-const creatReport = async (req, res) => {
-    const { completion_percentage, tasks_completed, challenges, recommendations } = req.body;
-    const { land_id } = req.params;
-    const { total_hours_worked } = req.body;
+const generatePDFReport = async (reportData, filePath) => {
+    return new Promise((resolve, reject) => {
+      const doc = new PDFDocument();
   
+      // التأكد من أن النصوص بتنسيق UTF-8
+      const encodeText = (text) => {
+        try {
+          return decodeURIComponent(escape(text));
+        } catch (e) {
+          return text; // العودة للنص الأصلي في حالة حدوث خطأ
+        }
+      };
+
+      console.log('مسار الملف:', filePath);
+      console.log('بيانات التقرير:', reportData);
+      
+      doc.pipe(fs.createWriteStream(filePath, { encoding: 'utf8' }));
+      
+      // إضافة محتوى التقرير إلى PDF
+      doc.fontSize(12).text(`التقرير الخاص بالأرض: ${encodeText(reportData.land_id) || 'غير محدد'}`, { align: 'center' });
+      doc.text(`نسبة الإنجاز: ${reportData.completion_percentage}%`);
+      doc.text(`المهام المكتملة: ${encodeText(reportData.tasks_completed) || 'غير محدد'}`);
+      
+      const challengesArray = Array.isArray(reportData.challenges) ? reportData.challenges : JSON.parse(reportData.challenges || '[]');
+      doc.text(`التحديات: ${challengesArray.join(', ')}`);
+
+      const recommendations = Array.isArray(reportData.recommendations) ? reportData.recommendations : [];
+      doc.text(`التوصيات: ${recommendations.join(', ') || 'لا توجد توصيات'}`);
+      doc.text(`ساعات العمل: ${reportData.hours_worked || 'غير محدد'}`);
+
+      // التحقق من أن التحليل يحتوي على قيم صحيحة
+      const avgCompletion = reportData.analysis?.avgCompletion || 'غير محدد';
+      const totalHours = reportData.analysis?.totalHours || 'غير محدد';
+      
+      doc.text('التحليل:', { underline: true });
+      doc.text(`معدل الإنجاز: ${avgCompletion}`);
+      doc.text(`إجمالي الساعات: ${totalHours}`);
+  
+      doc.end();
+  
+      doc.on('finish', () => {
+        console.log('تم إنشاء التقرير بنجاح');
+        resolve();
+      });
+  
+      doc.on('error', (error) => {
+        console.error('حدث خطأ أثناء إنشاء التقرير:', error);
+        reject(error);
+      });
+    });
+};
+
+
+// دالة لإنشاء التقرير
+const creatReport = async (req, res) => {
+    const { completion_percentage, tasks_completed, challenges, recommendations, total_hours_worked } = req.body;
+    const { land_id } = req.params;
+    if (!Array.isArray(challenges) || !Array.isArray(recommendations)) {
+        return res.status(400).json({ message: 'التحديات والتوصيات يجب أن تكون مصفوفات' });
+    }
+    
+    if (typeof total_hours_worked !== 'number' || total_hours_worked < 0) {
+        return res.status(400).json({ message: 'ساعات العمل يجب أن تكون رقمًا موجبًا' });
+    }
     try {
-      const token = req.header('authorization');
+   // التأكد من وجود المجلد قبل إنشاء التقرير
+   const dirPath = path.join(__dirname, 'generated_reports');
+   if (!fs.existsSync(dirPath)) {
+       fs.mkdirSync(dirPath);  // إنشاء المجلد إذا لم يكن موجودًا
+   }      const token = req.header('authorization');
       if (!token) {
         return res.status(401).json({ message: 'التوكن مطلوب للمصادقة.' });
       }
@@ -754,6 +820,7 @@ const creatReport = async (req, res) => {
       const decodedToken = jwt.verify(token, JWT_SECRET_KEY);
       const { email: user_email } = decodedToken;
   
+      // التحقق من وجود الأرض في قاعدة البيانات
       const land = await Land.findById(land_id);
       if (!land) {
         return res.status(404).json({ message: 'الأرض غير موجودة' });
@@ -763,6 +830,7 @@ const creatReport = async (req, res) => {
         return res.status(403).json({ message: 'البريد الإلكتروني لا يتطابق مع صاحب الأرض' });
       }
   
+      // التحقق إذا تم تقديم تقرير لهذا اليوم
       const existingReport = await DailyReport.findOne({
         land_id,
         report_date: { $gte: new Date(new Date().setHours(0, 0, 0, 0)), $lt: new Date(new Date().setHours(23, 59, 59, 999)) },
@@ -772,6 +840,7 @@ const creatReport = async (req, res) => {
         return res.status(400).json({ message: 'تم تقديم تقرير لهذا اليوم بالفعل' });
       }
   
+      // التحقق من صحة البيانات المدخلة
       if (completion_percentage < 0 || completion_percentage > 100) {
         return res.status(400).json({ message: 'نسبة الإنجاز يجب أن تكون بين 0 و 100' });
       }
@@ -780,9 +849,11 @@ const creatReport = async (req, res) => {
         return res.status(400).json({ message: 'ساعات العمل يجب أن تكون رقمًا موجبًا' });
       }
   
+      // استرجاع البريد الإلكتروني لمالك الأرض
       const landemail = await Land.findOne({ _id: land_id }).select('ownerEmail');
       const ownerEmail = landemail.ownerEmail;
   
+      // حساب التحليلات المطلوبة
       const avgCompletion = await calculateAverageCompletion(land_id);
       const totalHours = await calculateTotalHoursWorked(land_id);
       const challengesAnalysis = await analyzeChallenges(land_id);
@@ -795,6 +866,7 @@ const creatReport = async (req, res) => {
         monthlyData: JSON.stringify(monthlyData),
       };
   
+      // إنشاء التقرير وحفظه في قاعدة البيانات
       const newReport = new DailyReport({
         land_id,
         report_date: new Date(),
@@ -810,9 +882,24 @@ const creatReport = async (req, res) => {
   
       await newReport.save();
   
+      // إنشاء تقرير PDF وتخزينه في ملف
+      const filePath = path.join(__dirname, 'generated_reports', `cccc.pdf`);
+      console.log('Directory path:', filePath);  // Log the path to verify
+      if (!fs.existsSync(dirPath)) {
+          fs.mkdirSync(dirPath);
+      }
+      await generatePDFReport({
+        completion_percentage,
+        tasks_completed,
+        challenges,
+        recommendations,
+        hours_worked: total_hours_worked,
+        analysis,
+      }, filePath);
+  
+      // إرسال الرد مع رابط الملف
       res.status(201).json({
         message: 'تم إضافة التقرير بنجاح',
-        analysis,
         reportDetails: {
           land_id,
           completion_percentage,
@@ -820,13 +907,15 @@ const creatReport = async (req, res) => {
           challenges,
           recommendations,
           hours_worked: total_hours_worked,
+          pdfPath: filePath,  // إرسال مسار الملف المولد
         },
       });
     } catch (error) {
       console.error(error);
       res.status(500).json({ message: 'حدث خطأ أثناء إضافة التقرير', error: error.message });
     }
-};
+  };
+
   const calculateAverageCompletion = async (land_id) => {
     const reports = await DailyReport.find({ land_id });
     if (reports.length === 0) return 0;
@@ -846,7 +935,7 @@ const creatReport = async (req, res) => {
     const challengeFrequency = {};
   
     reports.forEach((report) => {
-      const challenges = report.challenges.split(','); // نفترض أن التحديات مفصولة بفواصل
+      const challenges = report.challenges; // نفترض أن التحديات مفصولة بفواصل
       challenges.forEach((challenge) => {
         challenge = challenge.trim();
         challengeFrequency[challenge] = (challengeFrequency[challenge] || 0) + 1;
