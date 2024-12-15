@@ -595,14 +595,30 @@ const companySchema = new mongoose.Schema({
   const Company = mongoose.model('Company', companySchema);
 
   const messageSchema = new mongoose.Schema({
-    landId: { type: mongoose.Schema.Types.ObjectId, required: true, ref: "Land" },
-    senderId: { type: String, required: true },  // معرف صاحب الأرض
-    receiverId: { type: String, required: true },  // معرف الضامن
-    message: { type: String, required: true },
-    timestamp: { type: Date, default: Date.now },
-    isRead: { type: Boolean, default: false }
+    senderId: { type: String, required: true }, // معرف المرسل (بريد إلكتروني)
+    receiverId: { type: String, required: true }, // معرف المستقبل (بريد إلكتروني)
+    message: { type: String, required: true }, // نص الرسالة
+    timestamp: { type: Date, default: Date.now }, // توقيت إرسال الرسالة
 });
 
-const Chat = mongoose.model("Message", messageSchema);
+// إنشاء سكيما المحادثة
+const chatSchema = new mongoose.Schema({
+    participants: {
+        type: [String], // قائمة بالبريد الإلكتروني للمشاركين في المحادثة (المالك والضامن)
+        required: true,
+    },
+    landId: {
+        type: mongoose.Schema.Types.ObjectId, // معرف الأرض المرتبطة بالمحادثة
+        ref: "Land", // ربط مع جدول الأراضي
+        required: true,
+    },
+    messages: {
+        type: [messageSchema], // مصفوفة من الرسائل المرتبطة بهذه المحادثة
+        default: [], // تعيين القيمة الافتراضية كمصفوفة فارغة
+    },
+    createdAt: { type: Date, default: Date.now }, // توقيت إنشاء المحادثة
+});
+
+const Chat = mongoose.model("Chat", chatSchema);
 
 module.exports ={OwnerFeedback,Chat, requests,DailyReport,WorkAnnouncement,Owner,Worker,Token,Land,works,Company,Work_analysis,Keywords,keywordsSchema};

@@ -1,18 +1,18 @@
-import express from 'express';
-import connectDB from './src/modules/DB/connection.js'; // Import the connectDB function
-import dotenv from 'dotenv';
+const express = require('express');
+const connectDB = require('./src/modules/DB/connection.js'); // Import the connectDB function
+const dotenv = require('dotenv');
 dotenv.config();
-import auth from './src/modules/auth/auth.js';
-import owner from './src/modules/Owner/owner.js';
-import worker from './src/modules/workers/worker.js';
-import chat from './src/modules/chat/chat.js';
-import axios from 'axios';
-import cors from 'cors';
-import company from './src/modules/company/company.js';
+const auth = require('./src/modules/auth/auth.js');
+const owner = require('./src/modules/Owner/owner.js');
+const worker = require('./src/modules/workers/worker.js');
+const chat = require('./src/modules/chat/chat.js');
+const axios = require('axios');
+const cors = require('cors');
+const company = require('./src/modules/company/company.js');
 
 // Initialize app
 const app = express();
-const PORT = 3000;
+const PORT = 2000;
 app.use(express.json());
 app.use(express.static('public'));
 app.use(cors());
@@ -26,6 +26,49 @@ app.use('/owner', owner);
 app.use('/company', company);
 app.use('/worker', worker);
 app.use('/chat', chat);
+const PDFDocument = require('pdfkit');
+const fs = require('fs');
+const path = require('path');
+
+// دالة لتوليد PDF وإرساله للمستخدم
+function generatePDF(req, res) {
+    const doc = new PDFDocument();
+
+    // تحديد مسار حفظ الملف على الخادم
+    const filePath = path.join(__dirname, 'generated_files', 'dynamic_generated.pdf');
+
+    // التأكد من أن المجلد موجود، إذا لم يكن موجودًا يتم إنشاؤه
+    if (!fs.existsSync(path.dirname(filePath))) {
+        fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    }
+
+    // إنشاء محتوى PDF ديناميكي
+    doc.fontSize(20).text('تقرير مبيعات ديناميكي', { align: 'center' });
+    doc.moveDown();
+    doc.fontSize(12).text('هذا التقرير تم توليده بشكل ديناميكي في ' + new Date().toLocaleString());
+    doc.moveDown();
+    doc.fontSize(12).text('المزيد من التفاصيل حول المبيعات هنا...');
+    doc.moveDown();
+    doc.text('تفاصيل إضافية يمكن توليدها حسب المطلوب...');
+
+    // حفظ الملف على الخادم أولًا
+    const writeStream = fs.createWriteStream(filePath);
+    doc.pipe(writeStream);
+
+    // بعد حفظ الملف، نرسل الملف للمستخدم
+    writeStream.on('finish', () => {
+        // إرسال الملف المخزن للمستخدم
+        res.sendFile(filePath, (err) => {
+            if (err) {
+                res.status(500).send('خطأ في إرسال الملف');
+            }
+        });
+    });
+
+    // إنهاء PDF
+    doc.end();
+}
+app.get('/generate-pdf', generatePDF);
 
 // API Request Example
 const url = 'https://api-v2.distancematrix.ai/maps/api/distancematrix/json';
@@ -69,47 +112,6 @@ app.get('/get-elevation', async (req, res) => {
     res.status(500).send('حدث خطأ أثناء الاتصال بـ API');
   }
 });
-const fetchSoilData = async (latitude, longitude) => {
-  try {
-    const response = await fetch(`https://soilgrids.org/api/v1/query?lat=${latitude}&lon=${longitude}`);
-
-    // تحقق مما إذا كانت الاستجابة سليمة (HTTP 200)
-    if (!response.ok) {
-      throw new Error('فشل في الاتصال بـ API: ' + response.status);
-    }
-
-    const data = await response.json();
-
-    // تحقق من أن البيانات التي تم استلامها تحتوي على المعلومات المطلوبة
-    if (!data.soil_type) {
-      throw new Error('البيانات المستلمة لا تحتوي على معلومات التربة');
-    }
-
-    const soilType = data.soil_type;  // نوع التربة
-    const soilMoisture = data.moisture; // نسبة الرطوبة
-    const soilPh = data.ph;  // الرقم الهيدروجيني (pH)
-
-    return {
-      soilType,
-      soilMoisture,
-      soilPh
-    };
-  } catch (error) {
-    console.error('حدث خطأ: ', error.message);
-    throw error;  // إعادة رمي الخطأ لالتقاطه في مكان آخر إذا لزم الأمر
-  }
-};
-
-// مثال على استخدام الإحداثيات لموقع الأرض
-const coordinates = { latitude: 31.8792891, longitude: 35.2194358 };
-
-fetchSoilData(coordinates.latitude, coordinates.longitude)
-  .then(soilData => {
-    console.log(soilData);
-  })
-  .catch(error => {
-    console.error('فشل في جلب بيانات التربة:', error);
-  });
 
 // Start server
 app.listen(PORT, () => {

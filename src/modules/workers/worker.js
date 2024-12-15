@@ -11,7 +11,10 @@ const { updateWorkerProfile,  announce, getLands,
     toggleWorkStatus,
     creatReport,
     feedbacksystem,
-    search} = require('./worker.controller.js');
+    search,
+    getChats,
+    sendMessage,
+    getonechat} = require('./worker.controller.js');
 const multer = require('multer');
 const axios = require("axios");
 const {Owner,Worker,Token,Land,works} = require('../DB/types.js');  // تأكد من أن المسار صحيح
@@ -35,4 +38,7 @@ router.post('/toggle-work-status', toggleWorkStatus);
 router.get('/feedback/:feedback_id/:status', authenticateJWT,feedbacksystem);
 
 router.get('/suggested-workers/:landId',authenticateJWT,search);
+router.get('/getchats',authenticateJWT,getChats);
+router.post('/sendmessages/:chatId',authenticateJWT,sendMessage);
+router.get('/chat/:chatId',authenticateJWT,getonechat);
 module.exports = router;

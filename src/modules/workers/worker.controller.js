@@ -926,38 +926,35 @@ const creatReport = async (req, res) => {
       });
     }
 };
-
-// كرون لإنشاء المحادثات
 cron.schedule("*/5 * * * *", async () => {
     try {
         // جلب جميع الأراضي المضمونة وحالتها true
         const lands = await Land.find({ isguarntee: true, status: true });
 
-        for (const land of lands) {
-            // التحقق من وجود المحادثة بالفعل
-            const existingChat = await Chat.findOne({ landId: land._id });
-
-            if (!existingChat) {
+        // المرور على جميع الأراضي المضمونة
+        await Promise.all(
+            lands.map(async (land) => {
                 try {
+                    // التحقق من وجود المحادثة بالفعل
+                    const existingChat = await Chat.findOne({ landId: land._id });
+                    if (existingChat) return;
+
                     // التحقق من وجود البريد الإلكتروني للمالك والضامن
                     if (!land.ownerEmail || !land.temporaryOwnerEmail) {
                         console.error(
                             `Missing ownerEmail or temporaryOwnerEmail for land ID: ${land._id}`
                         );
-                        continue; // تجاوز الأرض الحالية إذا كانت البيانات ناقصة
+                        return;
                     }
 
                     // إنشاء محادثة جديدة
                     const newChat = new Chat({
-                        participants: [
-                            land.ownerEmail, // البريد الإلكتروني للمالك
-                            land.temporaryOwnerEmail, // البريد الإلكتروني للضامن
-                        ],
-                        landId: land._id, // ربط المحادثة بالأرض
+                        participants: [land.ownerEmail, land.temporaryOwnerEmail],
+                        landId: land._id,
                         messages: [
                             {
-                                senderId: land.ownerEmail, // معرف المالك
-                                receiverId: land.temporaryOwnerEmail, // معرف الضامن
+                                senderId: land.ownerEmail,
+                                receiverId: land.temporaryOwnerEmail,
                                 message: `مرحبًا، تم إنشاء محادثة جديدة بخصوص ضمان الأرض "${land.description}" الواقعة في "${land.formattedAddress}".`,
                                 timestamp: new Date(),
                             },
@@ -973,14 +970,15 @@ cron.schedule("*/5 * * * *", async () => {
                         error.message
                     );
                 }
-            }
-        }
+            })
+        );
 
         console.log("Checked guaranteed lands and created chats if necessary.");
     } catch (error) {
         console.error("Error checking guaranteed lands:", error.message);
     }
 });
+
 const search = async (req, res) => {
     try {
         const token = req.header('authorization');
@@ -1093,13 +1091,183 @@ const search = async (req, res) => {
     }
 };
 
+const getChats = async (req, res) => {
+    try {  
+         const token = req.header('authorization');
+        if (!token) {
+            return res.status(401).json({ message: 'التوكن مطلوب للمصادقة.' });
+        }
+
+        const decodedToken = jwt.verify(token, JWT_SECRET_KEY);
+        const { email: user_email } = decodedToken;
+
+console.log(user_email);
+        // تحقق من وجود البريد الإلكتروني
+        if (!user_email) {
+            return res.status(401).json({ message: "التوكن لا يحتوي على بريد إلكتروني صالح" });
+        }
+
+        // جلب جميع المحادثات التي يكون المستخدم جزءًا منها
+        const chats = await Chat.find({ participants: user_email })
+            .select("_id participants messages landId")
+            .populate("landId", "description formattedAddress"); // جلب بيانات الأرض
+
+        // تهيئة قائمة المحادثات
+        const formattedChats = chats.map((chat) => {
+            const lastMessage =
+                chat.messages.length > 0
+                    ? chat.messages[chat.messages.length - 1]
+                    : null;
+
+            return {
+                chatId: chat._id,
+                participants: chat.participants,
+                landDetails: chat.landId,
+                lastMessage: lastMessage
+                    ? {
+                          senderId: lastMessage.senderId,
+                          receiverId: lastMessage.receiverId,
+                          message: lastMessage.message,
+                          timestamp: lastMessage.timestamp,
+                      }
+                    : null,
+            };
+        });
+
+        // إرسال المحادثات كاستجابة
+        res.status(200).json({ chats: formattedChats });
+    } catch (error) {
+        console.error("Error fetching chats:", error.message);
+
+        // التعامل مع أخطاء التوكن
+        if (error.name === "JsonWebTokenError") {
+            return res.status(401).json({ message: "التوكن غير صالح" });
+        }
+
+        // التعامل مع أي أخطاء أخرى
+        res.status(500).json({ message: "حدث خطأ أثناء جلب المحادثات", error: error.message });
+    }
+};
+
+const sendMessage = async (req, res) => {
+    try {
+        // التحقق من وجود التوكن في الهيدر
+        const token = req.header('authorization');
+        if (!token) {
+            return res.status(401).json({ message: 'التوكن مطلوب للمصادقة.' });
+        }
+
+        // فك التوكن للحصول على البريد الإلكتروني للمرسل
+        const decodedToken = jwt.verify(token, JWT_SECRET_KEY);
+        const { email: senderEmail } = decodedToken;
+
+        // تحقق من وجود البريد الإلكتروني في التوكن
+        if (!senderEmail) {
+            return res.status(401).json({ message: "التوكن لا يحتوي على بريد إلكتروني صالح" });
+        }
+
+        // الحصول على chatId من الرابط (req.params)
+        const { chatId } = req.params;
+
+        // التحقق من وجود الرسالة في الجسم
+        const { message } = req.body;
+        if (!message) {
+            return res.status(400).json({ message: "يجب توفير الرسالة" });
+        }
+
+        // البحث عن المحادثة باستخدام chatId
+        const chat = await Chat.findById(chatId);
+        if (!chat) {
+            return res.status(404).json({ message: "المحادثة غير موجودة" });
+        }
+
+        // التحقق إذا كان المرسل أحد المشاركين في المحادثة (إما المرسل أو المستقبل)
+        const isParticipant = chat.participants.includes(senderEmail);
+        if (!isParticipant) {
+            return res.status(403).json({ message: "أنت غير مفوض لإرسال الرسائل في هذه المحادثة" });
+        }
+
+        // تحديد البريد الإلكتروني للمستقبل (الطرف الآخر في المحادثة)
+        const receiverEmail = chat.participants.find((email) => email !== senderEmail);
+        if (!receiverEmail) {
+            return res.status(400).json({ message: "تعذر العثور على المشارك الآخر" });
+        }
+
+        // إنشاء الرسالة الجديدة
+        const newMessage = {
+            senderId: senderEmail,
+            receiverId: receiverEmail,
+            message: message,
+            timestamp: new Date(),
+        };
+
+        // إضافة الرسالة إلى المحادثة وحفظها في قاعدة البيانات
+        chat.messages.push(newMessage);
+        await chat.save();
+
+        // إرسال الاستجابة مع التفاصيل
+        res.status(200).json({
+            message: "تم إرسال الرسالة بنجاح",
+            chatId: chat._id,
+            newMessage,
+        });
+    } catch (error) {
+        // التعامل مع الأخطاء
+        console.error("Error sending message:", error.message);
+        res.status(500).json({ message: "حدث خطأ أثناء إرسال الرسالة", error: error.message });
+    }
+};
+const getonechat= async (req, res) => {
+    try {
+        // التحقق من وجود التوكن في الهيدر
+        const token = req.header('authorization');
+        if (!token) {
+            return res.status(401).json({ message: 'التوكن مطلوب للمصادقة.' });
+        }
+
+        // فك التوكن للحصول على البريد الإلكتروني للمرسل
+        const decodedToken = jwt.verify(token,JWT_SECRET_KEY);
+        const { email: senderEmail } = decodedToken;
+
+        // تحقق من وجود البريد الإلكتروني في التوكن
+        if (!senderEmail) {
+            return res.status(401).json({ message: "التوكن لا يحتوي على بريد إلكتروني صالح" });
+        }
+
+        const { chatId } = req.params;
+
+        // البحث عن المحادثة باستخدام chatId
+        const chat = await Chat.findById(chatId);
+        if (!chat) {
+            return res.status(404).json({ message: "المحادثة غير موجودة" });
+        }
+
+        // التحقق من أن المرسل هو أحد المشاركين في المحادثة
+        const isParticipant = chat.participants.includes(senderEmail);
+        if (!isParticipant) {
+            return res.status(403).json({ message: "أنت لست من المشاركين في هذه المحادثة" });
+        }
+
+        // إرجاع تفاصيل المحادثة
+        res.status(200).json({
+            message: "تم العثور على المحادثة بنجاح",
+            chatId: chat._id,
+            participants: chat.participants,
+            messages: chat.messages,
+            createdAt: chat.createdAt,
+        });
+
+    } catch (error) {
+        console.error("Error fetching chat:", error.message);
+        res.status(500).json({ message: "حدث خطأ أثناء استرجاع المحادثة", error: error.message });
+    }
+};
+
   
   
-  
-  
-  module.exports={ feedbacksystem,search,
+  module.exports={ feedbacksystem,search,sendMessage,getonechat,
     toggleWorkStatus,creatReport,
     getLandsForGuarantor,updateWorkerProfile,
     notification,respondToRequest,
     announce,getLands,weathernotification,
-    getAllAnnouncements,joinland}
+    getAllAnnouncements,joinland,getChats}
