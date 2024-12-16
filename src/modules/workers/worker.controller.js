@@ -2,14 +2,13 @@
 const axios=require('axios');
 const mongoose = require('mongoose');
 const multer = require('multer');
-
 const PDFDocument = require('pdfkit');
+const moment=require('moment');
 const fs = require('fs');
 const path = require('path');
 const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
 const cron = require('node-cron'); 
-const moment = require('moment');
 const {Owner,Worker,DailyReport,Activity,OwnerFeedback,Chat,Land,works,requests,WorkAnnouncement} = require('../DB/types.js');  // تأكد من أن المسار صحيح
 const JWT_SECRET_KEY = '1234#';  // نفس المفتاح السري الذي ستستخدمه للتحقق من التوكن
 const updateWorkerProfile = async (req, res) => {
@@ -458,10 +457,142 @@ const joinland=async (req, res) => {
 const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
-        user: 'tasbeehsa80@gmail.com', // بريدك الإلكتروني
-        pass: 'yeaf tcnf prlj kzlj'    // كلمة المرور أو كلمة مرور التطبيق
+        user: 'tasbeehsa80@gmail.com', // Your email
+        pass: 'yeaf tcnf prlj kzlj'    // App password (if 2FA is enabled)
+    },
+    tls: {
+        rejectUnauthorized: false // Bypass certificate validation (for self-signed certificate issue)
     }
 });
+
+const sendEmailNotification = async (toEmail, subject, weatherMessage) => {
+    const mailOptions = {
+        from: 'tasbeehsa80@gmail.com',
+        to: toEmail,
+        subject: subject,
+        text: weatherMessage
+    };
+
+    try {
+        await transporter.sendMail(mailOptions);
+        console.log('Email sent successfully');
+    } catch (error) {
+        console.error('Error sending email:', error.message);
+    }
+};
+const sendreq = async (req, res) => {
+    const { landId, workerId } = req.params; // استخراج معرف الأرض ومعرف العامل من الرابط
+    const { taskDescription, selectedDay, startTime, endTime } = req.body;
+
+    // استخراج التوكن من الهيدر
+    const token = req.header('authorization'); // الحصول على التوكن من الهيدر
+
+    if (!token) {
+        return res.status(401).json({ message: 'Authentication token is required.' });
+    }
+
+    try {
+        // فك تشفير التوكن والتحقق منه
+        const decodedToken = jwt.verify(token, JWT_SECRET_KEY);
+        const { email, role } = decodedToken; // استخراج البريد الإلكتروني والدور من التوكن
+
+        req.user = { email, role }; // تخزين بيانات المستخدم في req.user
+
+        // العثور على الأرض بناءً على landId
+        const land = await Land.findOne({ _id: landId });
+
+        if (!land) {
+            return res.status(404).json({ message: 'Land not found.' });
+        }
+
+        // التحقق من صلاحية الأونر (المالك أو المالك المؤقت)
+        if (!(role === 'Owner' || email === land.temporaryOwnerEmail)) {
+            return res.status(403).json({ message: 'Access denied. Only Owners or temporary owners can access this data.' });
+        }
+
+        // البحث عن العامل باستخدام _id
+        const work = await works.findOne({ _id: workerId }); // تم التعديل هنا لاستخدام _id
+
+        if (!work) {
+            return res.status(404).json({ message: 'Worker not found in works.' });
+        }
+
+        const { email: workerEmail } = work; // استخراج البريد الإلكتروني من جدول "works"
+
+        const worker = await works.findOne({ email: workerEmail });
+        if (!worker) {
+            return res.status(404).json({ message: 'Worker not found.' });
+        }
+
+        // إضافة فحص إذا كانت availableDays موجودة ومصفوفة
+        if (!Array.isArray(worker.availableDays) || !worker.availableDays.includes(selectedDay)) {
+            return res.status(400).json({ message: `The worker is not available on ${selectedDay}.` });
+        }
+
+        const availableHours = worker.workingHours.filter(hour => hour.day === selectedDay);
+        if (availableHours.length === 0) {
+            return res.status(400).json({ message: `The worker has no working hours on ${selectedDay}.` });
+        }
+
+        const isTimeValid = availableHours.some(hour => {
+            const workerStart = moment(hour.startTime, 'h:mm A');
+            const workerEnd = moment(hour.endTime, 'h:mm A');
+            const requestedStart = moment(startTime, 'h:mm A');
+            const requestedEnd = moment(endTime, 'h:mm A');
+
+            return requestedStart.isBetween(workerStart, workerEnd, null, '[)') && requestedEnd.isBetween(workerStart, workerEnd, null, '[)');
+        });
+
+        if (!isTimeValid) {
+            return res.status(400).json({
+                message: `The requested time is outside of the available working hours of ${selectedDay} (Available: ${availableHours.map(hour => `${hour.startTime} - ${hour.endTime}`).join(', ')})`,
+            });
+        }
+
+        // رسالة العقد مع تحديد اليوم والمهمة
+        const contractMessage = `
+        عقد العمل بين صاحب الأرض والعامل: ${worker.name}
+        
+        تفاصيل المهمة:
+        - المهمة المطلوبة: ${taskDescription}
+        - اليوم: ${selectedDay}
+        - الوقت: من ${startTime} إلى ${endTime}
+        
+        تفاصيل العامل:
+        - الاسم: ${worker.name}
+        - التخصص: ${worker.skills.join(', ')}
+        - المعدّات: ${worker.tools.join(', ')}
+        - الأجر: ${worker.hourlyRate} دولار في الساعة
+        
+        تفاصيل الأرض:
+        - الوصف: ${land.description}
+        - المساحة: ${land.area} متر مربع
+        - نوع العمل: ${land.workType}
+        - العنوان: ${land.formattedAddress || 'عنوان غير متوفر'}
+        - رابط Google Maps: ${land.googleMapsLink || 'رابط غير متوفر'}
+        - المنطقة: ${land.city || 'مدينة غير محددة'}, ${land.town || 'البلدة غير محددة'}
+        
+        إذا كنت موافقًا على الشروط، يرجى التوقيع والعودة إلينا.
+        `;
+
+        // إرسال البريد الإلكتروني
+        await sendEmailNotification(worker.email, 'طلب العمل الجديد', contractMessage);
+
+        return res.status(200).json({
+            message: 'Work request sent successfully.',
+            contractMessage,
+        });
+
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ message: 'Internal server error.' });
+    }
+};
+///يتم هون انشاء طلب وارساله عبر الايميل وبعمل فحص دايما وهيك انه الموعد يكون محدد 
+//هسة لازم اكمل انه من عند هاي النقطر ابني انه بدل ايميل يكون نوتفيكشن ويظهر للعامل ويطلعله التفاصيل ويعطيه ت
+//  عديل انه مثلا المهمة هاي بقدر اعملها ب 5 ساعات وهيك وبعدين بيتم يرجع ارساله وبشوف ان بوافق عليه ولا لا , وكمان شغلة انه اذا تمم الموافقة لازم يطلع انه محجوز بالجدول وهيك 
+
+
 const getWeather = async (latitude, longitude) => {
     try {
         const response = await axios.get(`https://api.openweathermap.org/data/2.5/weather`, {
@@ -478,21 +609,7 @@ const getWeather = async (latitude, longitude) => {
         throw new Error('Error fetching weather data');
     }
 };
-const sendEmailNotification = async (toEmail, subject, weatherMessage) => {
-    const mailOptions = {
-        from: 'tasbeehsa80@gmail.com',
-        to: toEmail,
-        subject: subject,
-        text: weatherMessage
-    };
 
-    try {
-        await transporter.sendMail(mailOptions);
-        console.log('Email sent successfully');
-    } catch (error) {
-        console.error('Error sending email:', error.message);
-    }
-};
 const sendWeatherNotification = async (latitude, longitude, userEmail) => {
     try {
         // جلب بيانات الطقس
@@ -1737,7 +1854,7 @@ const getWorkerDetails = async (req, res) => {
 
 
   module.exports={ feedbacksystem,search,sendMessage,getonechat,
-    toggleWorkStatus,creatReport,updateAnnouncement,
+    toggleWorkStatus,creatReport,updateAnnouncement,sendreq,
     getLandsForGuarantor,updateWorkerProfile,getMyAnnouncements,
     notification,respondToRequest,getWorkers,getWorkerDetails,
     announce,getLands,weathernotification,deleteAnnouncement,

@@ -19,7 +19,8 @@ const { updateWorkerProfile,  announce, getLands,
     updateAnnouncement,
     deleteAnnouncement,
     getMyAnnouncements,
-    getWorkerDetails} = require('./worker.controller.js');
+    getWorkerDetails,
+    sendreq} = require('./worker.controller.js');
     const { Activity, Tool, Skill, Factor } = require('../DB/types.js');  // تأكد من المسار الصحيح
 
 const multer = require('multer');
@@ -51,6 +52,7 @@ router.post('/sendmessages/:chatId',authenticateJWT,sendMessage);
 router.get('/chat/:chatId',authenticateJWT,getonechat);
 router.get('/workers/:workerId', authenticateJWT,getWorkerDetails);
 
+router.post('/sendWorkRequest/:landId/:workerId', authenticateJWT,sendreq);
 const activityGoals = {
     'حصاد القمح': 'جمع سنابل القمح الناضجة بطريقة فعالة',
     'زراعة المحاصيل': 'ضمان زراعة البذور أو الشتلات بطريقة تحقق نموًا سليمًا',
