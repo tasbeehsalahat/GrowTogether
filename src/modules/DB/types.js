@@ -249,63 +249,67 @@ const landSchema = new mongoose.Schema({
 
 const Land = mongoose.model('Land', landSchema);
 
-
 const dailyReportSchema = new mongoose.Schema({
-  land_id: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Land', // الربط مع النموذج الخاص بالأرض
-    required: true,
-  },
-  report_date: {
-    type: Date,
-    default: Date.now,
-  },
-  completion_percentage: {
-    type: Number,
-    required: true,
-    min: 0,
-    max: 100,
-  },
-  tasks_completed: {
-    type: [String], // قائمة بالمهام المكتملة
-    required: true,
-  },
-  challenges: {
-    type: [String], // قائمة بالتحديات التي تمت مواجهتها
-    required: true,
-  },
-  recommendations: {
-    type: [String], // قائمة بالتوصيات
-    required: true,
-  },
-  hours_worked: {
-    type: Number,
-    required: true,
-  },
-  owner_email: {
-    type: String,
-    required: true,
-  },
-  reporter_email: {
-    type: String,
-    required: true,
-  },
-  analysis: {
-    avgCompletion: { type: Number },
-    totalHours: { type: Number },
-    challengesAnalysis: { type: String },
-    monthlyData: { type: String },
-  },
-  status: {
-    type: String,
-    enum: ['مقدم', 'مراجعة صاحب الأرض', 'مغلق'],
-    default: 'مقدم', // الحالة الافتراضية للتقرير
-  },
-  owner_feedback: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'OwnerFeedback', // الربط بملاحظات صاحب الأرض
-  }
-});
+    land_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Land', // الربط مع نموذج الأرض
+      required: true,
+    },
+    report_date: {
+      type: Date,
+      default: Date.now,
+    },
+    completion_percentage: {
+      type: Number,
+      required: true,
+      min: 0,
+      max: 100,
+    },
+    tasks_completed: {
+      type: [String], // قائمة بالمهام المكتملة
+      required: true,
+    },
+    challenges: {
+      type: [String], // قائمة بالتحديات التي تمت مواجهتها
+      required: true,
+    },
+    recommendations: {
+      type: [String], // قائمة بالتوصيات
+      required: true,
+    },
+    hours_worked: {
+      type: Number,
+      required: true,
+      min: 0, // تأكيد أن عدد الساعات لا يمكن أن يكون سالب
+    },
+    owner_email: {
+      type: String,
+      required: true,
+    },
+    reporter_email: {
+      type: String,
+      required: true,
+    },
+    analysis: {
+      avgCompletion: { type: Number },
+      totalHours: { type: Number },
+      challengesAnalysis: { type: mongoose.Schema.Types.Mixed }, // JSON
+      monthlyData: { type: mongoose.Schema.Types.Mixed }, // JSON
+    },
+    status: {
+      type: String,
+      enum: ['مقدم', 'مراجعة صاحب الأرض', 'مغلق'],
+      default: 'مقدم',
+    },
+    owner_feedback: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'OwnerFeedback', // الربط بملاحظات صاحب الأرض
+    },
+    is_pdf_generated: {
+      type: Boolean,
+      default: false, // هل تم إنشاء PDF لهذا التقرير
+    },
+  }, { timestamps: true }); // إضافة createdAt و updatedAt تلقائيًا
   
   
   const DailyReport = mongoose.model('DailyReport', dailyReportSchema);
@@ -386,8 +390,15 @@ const Work = new mongoose.Schema({
         type: String, 
         default: 'Available' 
     },  
-      isGuarantor: { type: Boolean, default: false } // إضافة حقل isGuarantor (هل العامل ضامن؟)
-
+      isGuarantor: { type: Boolean, default: false },
+      workingHours: [
+        {
+            day: { type: String, required: true }, // اليوم (مثال: "Monday")
+            startTime: { type: String, required: true }, // وقت البدء (مثال: "9:00 AM")
+            endTime: { type: String, required: true }, // وقت الانتهاء (مثال: "5:00 PM")
+        }
+    ]
+    
 });
 
 const works = mongoose.model('Works', Work);
@@ -621,4 +632,22 @@ const chatSchema = new mongoose.Schema({
 
 const Chat = mongoose.model("Chat", chatSchema);
 
-module.exports ={OwnerFeedback,Chat, requests,DailyReport,WorkAnnouncement,Owner,Worker,Token,Land,works,Company,Work_analysis,Keywords,keywordsSchema};
+const activitySchema = new mongoose.Schema({
+    name: { type: String, required: true },
+    description: { type: String },
+    details: {
+      tools: [String],  // قائمة الأدوات كـ Strings (يمكنك استخدام ID للأدوات إذا كان لديك علاقة مع أدوات أخرى)
+      skills: [String], // قائمة المهارات كـ Strings (نفس الشيء مع المهارات)
+      factors: [String], // قائمة العوامل كـ Strings
+      steps: [String]    // خطوات النشاط
+    }
+  });
+
+// تعريف الـ Model
+const Activity = mongoose.model('Activity', activitySchema);
+
+
+
+  
+
+module.exports ={OwnerFeedback,Chat, Activity, requests,DailyReport,WorkAnnouncement,Owner,Worker,Token,Land,works,Company,Work_analysis,Keywords,keywordsSchema};

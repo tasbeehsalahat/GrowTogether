@@ -9,8 +9,8 @@ const chat = require('./src/modules/chat/chat.js');
 const axios = require('axios');
 const cors = require('cors');
 const company = require('./src/modules/company/company.js');
-
 // Initialize app
+const Activity=require('./src/modules/DB/types.js')
 const app = express();
 const PORT = 2000;
 app.use(express.json());
@@ -27,29 +27,39 @@ app.use('/company', company);
 app.use('/worker', worker);
 app.use('/chat', chat);
 const PDFDocument = require('pdfkit');
-const fs = require('fs');
-const path = require('path');
 
-// دالة لتوليد PDF وإرساله للمستخدم
+const fs = require('fs'); // التعامل مع الملفات
+const path = require('path'); // لإدارة المسارات
+
+// دالة لتوليد PDF باللغة العربية وإرساله للمستخدم
 function generatePDF(req, res) {
-    const doc = new PDFDocument();
-
-    // تحديد مسار حفظ الملف على الخادم
-    const filePath = path.join(__dirname, 'generated_files', 'dynamic_generated.pdf');
+    const doc = new PDFDocument({ lang: 'ar' }); // إنشاء وثيقة جديدة
+    const filePath = path.join(__dirname, 'generated_files', 'dynamic_generated_arabic.pdf');
 
     // التأكد من أن المجلد موجود، إذا لم يكن موجودًا يتم إنشاؤه
     if (!fs.existsSync(path.dirname(filePath))) {
         fs.mkdirSync(path.dirname(filePath), { recursive: true });
     }
 
-    // إنشاء محتوى PDF ديناميكي
+    // تحميل خط يدعم العربية
+    const arabicFont = path.join(__dirname, 'fonts', 'Amiri-1.001', 'Amiri-Regular.ttf');
+    if (!fs.existsSync(arabicFont)) {
+        return res.status(500).send('خطأ: ملف الخط العربي غير موجود.');
+    }
+
+    // تعيين الخط العربي
+    doc.font(arabicFont);
+
+    // كتابة محتوى PDF باللغة العربية
     doc.fontSize(20).text('تقرير مبيعات ديناميكي', { align: 'center' });
     doc.moveDown();
-    doc.fontSize(12).text('هذا التقرير تم توليده بشكل ديناميكي في ' + new Date().toLocaleString());
+    doc.fontSize(12).text(`هذا التقرير تم توليده بشكل ديناميكي في ${new Date().toLocaleString()}`, {
+        align: 'right',
+      });
     doc.moveDown();
-    doc.fontSize(12).text('المزيد من التفاصيل حول المبيعات هنا...');
+    doc.fontSize(12).text('المزيد من التفاصيل حول المبيعات هنا...', { align: 'right' });
     doc.moveDown();
-    doc.text('تفاصيل إضافية يمكن توليدها حسب المطلوب...');
+    doc.text('تفاصيل إضافية يمكن توليدها حسب المطلوب...', { align: 'right' });
 
     // حفظ الملف على الخادم أولًا
     const writeStream = fs.createWriteStream(filePath);
@@ -68,7 +78,11 @@ function generatePDF(req, res) {
     // إنهاء PDF
     doc.end();
 }
+
+// مسار لعرض ملف PDF للمستخدم
 app.get('/generate-pdf', generatePDF);
+
+
 
 // API Request Example
 const url = 'https://api-v2.distancematrix.ai/maps/api/distancematrix/json';
@@ -113,7 +127,6 @@ app.get('/get-elevation', async (req, res) => {
   }
 });
 
-// Start server
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });

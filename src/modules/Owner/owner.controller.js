@@ -827,27 +827,27 @@ const getguarntors = async (req, res) => {
         }
 
         // في حالة الأرض ليست مضمونة
-        workers = await Worker.find({
+        workers = await works.find({
             areas: { $regex: streetName, $options: 'i' },
         });
 
         // البحث باستخدام البلدة إذا لم يتم العثور على عمال
         if (workers.length === 0) {
-            workers = await Worker.find({
+            workers = await works.find({
                 areas: { $regex: town, $options: 'i' },
             });
         }
 
         // البحث باستخدام المدينة إذا لم يتم العثور على عمال
         if (workers.length === 0) {
-            workers = await Worker.find({
+            workers = await works.find({
                 areas: { $regex: city, $options: 'i' },
             });
         }
 
         // البحث باستخدام عدة شروط (الشارع، البلدة، المدينة)
         if (workers.length === 0) {
-            workers = await Worker.find({
+            workers = await works.find({
                 $or: [
                     { areas: { $regex: streetName, $options: 'i' } },
                     { areas: { $regex: town, $options: 'i' } },
@@ -866,7 +866,6 @@ const getguarntors = async (req, res) => {
         return res.status(500).json({ message: 'Server error occurred.' });
     }
 };
-
 const createRequest = async (req, res) => {
     try {
         // استخراج التوكن من الهيدر
@@ -879,38 +878,41 @@ const createRequest = async (req, res) => {
         const decodedToken = jwt.verify(token, JWT_SECRET_KEY);
         const { email, role } = decodedToken;
 
-        if (!email) {
-            return res.status(400).json({ message: 'Owner email is missing in the token.' });
-        }
-
-        if (role !== 'Owner') {
-            return res.status(403).json({ message: 'Access denied. Only Owners can send requests.' });
-        }
-
-        // العثور على المالك بناءً على الإيميل
-        const owner = await Owner.findOne({ email });
-        if (!owner) {
-            return res.status(404).json({ message: 'Owner not found.' });
-        }
-
         // استخراج landId و workerEmail من الرابط
         let { landId, workerEmail } = req.params;
         landId = landId.replace(/^:/, ''); // إزالة النقطتين في بداية المعرف
         workerEmail = workerEmail.replace(/^:/, ''); // إزالة النقطتين في بداية البريد الإلكتروني
 
+        // العثور على الأرض بناءً على landId
+        const land = await Land.findOne({ _id: landId });
+
         console.log(`Land ID: ${landId}, Worker Email: ${workerEmail}`);
 
+        if (!email) {
+            return res.status(400).json({ message: 'Owner email is missing in the token.' });
+        }
+
+        // التحقق من صلاحية الأونر (المالك الأصلي أو الضامن المؤقت)
+        if (!(role === 'Owner' || email === land.temporaryOwnerEmail)) {
+            return res.status(403).json({ message: 'Access denied. Only Owners or temporary owners can access this data.' });
+        }
+
+        // التحقق من وجود landId و workerEmail
         if (!landId || !workerEmail) {
             return res.status(400).json({ message: 'Land ID and Worker Email are required in the URL.' });
         }
 
-        // التحقق من الأرض
-        const land = await Land.findOne({ _id: landId, ownerEmail: email });
+        // التحقق من وجود الأرض
         if (!land) {
-            return res.status(404).json({ message: 'Land not found or does not belong to the owner.' });
+            return res.status(404).json({ message: 'Land not found.' });
         }
 
-        // التحقق من العامل
+        // التحقق إذا كان الأرض تعود للأونر الأصلي أو الضامن المؤقت
+        if (land.ownerEmail !== email && land.temporaryOwnerEmail !== email) {
+            return res.status(403).json({ message: 'Access denied. This land does not belong to you or you are not the temporary owner.' });
+        }
+
+        // التحقق من وجود العامل
         const worker = await works.findOne({ email: workerEmail });
         if (!worker) {
             return res.status(404).json({ message: 'Worker not found.' });
@@ -920,8 +922,8 @@ const createRequest = async (req, res) => {
         const newRequest = new requests({
             landId,
             workerEmail, // حفظ الإيميل الخاص بالعامل
-            ownerId: owner._id,
-            owneremail: email, // تعيين الإيميل الخاص بالمالك
+            ownerId: worker._id,  // سيتم تعيين معرّف العامل هنا كمالك (أو الشخص الذي يرسل الطلب)
+            owneremail: email, // تعيين الإيميل الخاص بالمالك أو الضامن
             status: 'Pending'
         });
 
@@ -935,7 +937,7 @@ const createRequest = async (req, res) => {
                 landId: newRequest.landId,
                 workerEmail: newRequest.workerEmail, // الإيميل الخاص بالعامل
                 ownerId: newRequest.ownerId,
-                owneremail: newRequest.owneremail, // الإيميل الخاص بالمالك
+                owneremail: newRequest.owneremail, // الإيميل الخاص بالمالك أو الضامن
                 status: 'Pending',
             },
         });
@@ -944,6 +946,7 @@ const createRequest = async (req, res) => {
         return res.status(500).json({ message: 'Server error occurred.' });
     }
 };
+
 
 
 const calculateWorkersForLand = async (req, res) => {

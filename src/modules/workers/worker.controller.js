@@ -10,7 +10,7 @@ const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
 const cron = require('node-cron'); 
 const moment = require('moment');
-const {Owner,Worker,DailyReport,OwnerFeedback,Chat,Land,works,requests,WorkAnnouncement} = require('../DB/types.js');  // تأكد من أن المسار صحيح
+const {Owner,Worker,DailyReport,Activity,OwnerFeedback,Chat,Land,works,requests,WorkAnnouncement} = require('../DB/types.js');  // تأكد من أن المسار صحيح
 const JWT_SECRET_KEY = '1234#';  // نفس المفتاح السري الذي ستستخدمه للتحقق من التوكن
 const updateWorkerProfile = async (req, res) => {
     try {
@@ -95,9 +95,14 @@ const announce = async (req, res) => {
         const { _id, skills, contactNumber, tools, isGuarantor, street, city, town, areas } = worker;
 
         // التأكد من وجود بيانات العمل في الطلب
-        const { availableDays, hourlyRate } = req.body;
-        if (!availableDays || !hourlyRate) {
-            return res.status(400).json({ message: "Missing required work data (availableDays or hourlyRate)." });
+        const { availableDays, hourlyRate, workingHours } = req.body;
+        if (!availableDays || !hourlyRate || !workingHours) {
+            return res.status(400).json({ message: "Missing required work data (availableDays, hourlyRate, or workingHours)." });
+        }
+
+        // التحقق من صحة حقل ساعات العمل
+        if (!Array.isArray(workingHours) || workingHours.length === 0) {
+            return res.status(400).json({ message: "Working hours must be provided as an array." });
         }
 
         // تجميع العنوان
@@ -126,6 +131,7 @@ const announce = async (req, res) => {
             tools,
             availableDays,
             hourlyRate,
+            workingHours, // إضافة ساعات العمل هنا
             areas,
             location: {
                 type: "Point",
@@ -151,6 +157,171 @@ const announce = async (req, res) => {
         });
     } catch (error) {
         console.error('Error in adding the announcement:', error);
+        res.status(500).json({ message: 'Server error occurred.', error: error.message });
+    }
+};
+const updateAnnouncement = async (req, res) => {
+    try {
+        // استخراج التوكن من الهيدر
+        const token = req.header("authorization");
+        if (!token) {
+            return res.status(401).json({ message: "Authentication token is required." });
+        }
+
+        // فك تشفير التوكن والتحقق من صحته
+        let decodedToken;
+        try {
+            decodedToken = jwt.verify(token, JWT_SECRET_KEY);
+        } catch (err) {
+            if (err.name === 'TokenExpiredError') {
+                return res.status(401).json({ message: 'Token has expired. Please login again.' });
+            }
+            if (err.name === 'JsonWebTokenError') {
+                return res.status(401).json({ message: 'Invalid token. Please login again.' });
+            }
+            return res.status(401).json({ message: 'Authentication failed. Please login again.' });
+        }
+
+        const { email, role } = decodedToken;
+
+        // تحقق من الدور (يجب أن يكون العامل فقط)
+        if (role !== "Worker") {
+            return res.status(403).json({ message: "Access denied. Only Workers can update their announcements." });
+        }
+
+        // استخراج معرف الإعلان (ID) من باراميتر الطلب
+        const { id } = req.params;
+
+        // العثور على الإعلان المحدد
+        const announcement = await works.findById(id);
+        if (!announcement) {
+            return res.status(404).json({ message: "Announcement not found." });
+        }
+
+        // التأكد من أن العامل الذي يحاول التحديث هو مالك الإعلان
+        if (announcement.email !== email) {
+            return res.status(403).json({ message: "You can only update your own announcements." });
+        }
+
+        // تحديث الحقول المطلوبة فقط
+        const updates = req.body; // البيانات القادمة في الطلب
+        console.log(updates);
+        if (Object.keys(updates).length === 0) {
+            return res.status(400).json({
+                message: "No body provided. Please send fields to update."
+            });
+        }
+        for (const key in updates) {
+            if (Object.hasOwn(announcement, key)) {
+                announcement[key] = updates[key];
+            }
+        }
+
+        // حفظ التحديثات في قاعدة البيانات
+        const updatedAnnouncement = await announcement.save();
+
+        res.status(200).json({
+            message: "Announcement updated successfully.",
+            announcement: updatedAnnouncement
+        });
+    } catch (error) {
+        console.error('Error in updating announcement:', error);
+        res.status(500).json({ message: 'Server error occurred.', error: error.message });
+    }
+};
+const getMyAnnouncements = async (req, res) => {
+    try {
+        // استخراج التوكن من الهيدر
+        const token = req.header("authorization");
+        if (!token) {
+            return res.status(401).json({ message: "Authentication token is required." });
+        }
+
+        // فك تشفير التوكن والتحقق من صحته
+        let decodedToken;
+        try {
+            decodedToken = jwt.verify(token, JWT_SECRET_KEY);
+        } catch (err) {
+            if (err.name === 'TokenExpiredError') {
+                return res.status(401).json({ message: 'Token has expired. Please login again.' });
+            }
+            if (err.name === 'JsonWebTokenError') {
+                return res.status(401).json({ message: 'Invalid token. Please login again.' });
+            }
+            return res.status(401).json({ message: 'Authentication failed. Please login again.' });
+        }
+
+        const { email, role } = decodedToken;
+
+        // تحقق من الدور (يجب أن يكون العامل فقط)
+        if (role !== "Worker") {
+            return res.status(403).json({ message: "Access denied. Only Workers can access their announcements." });
+        }
+
+        // جلب كل الإعلانات الخاصة بالعامل
+        const myAnnouncements = await works.find({ email });
+        if (myAnnouncements.length === 0) {
+            return res.status(404).json({ message: "No announcements found for this worker." });
+        }
+
+        res.status(200).json({
+            message: "My announcements retrieved successfully.",
+            announcements: myAnnouncements
+        });
+    } catch (error) {
+        console.error('Error in fetching announcements:', error);
+        res.status(500).json({ message: 'Server error occurred.', error: error.message });
+    }
+};
+const deleteAnnouncement = async (req, res) => {
+    try {
+        // استخراج التوكن من الهيدر
+        const token = req.header("authorization");
+        if (!token) {
+            return res.status(401).json({ message: "Authentication token is required." });
+        }
+
+        // فك تشفير التوكن والتحقق من صحته
+        let decodedToken;
+        try {
+            decodedToken = jwt.verify(token, JWT_SECRET_KEY);
+        } catch (err) {
+            if (err.name === 'TokenExpiredError') {
+                return res.status(401).json({ message: 'Token has expired. Please login again.' });
+            }
+            if (err.name === 'JsonWebTokenError') {
+                return res.status(401).json({ message: 'Invalid token. Please login again.' });
+            }
+            return res.status(401).json({ message: 'Authentication failed. Please login again.' });
+        }
+
+        const { email, role } = decodedToken;
+
+        // تحقق من الدور (يجب أن يكون العامل فقط)
+        if (role !== "Worker") {
+            return res.status(403).json({ message: "Access denied. Only Workers can delete their announcements." });
+        }
+
+        // استخراج معرف الإعلان (ID) من باراميتر الطلب
+        const { id } = req.params;
+
+        // العثور على الإعلان المحدد
+        const announcement = await works.findById(id);
+        if (!announcement) {
+            return res.status(404).json({ message: "Announcement not found." });
+        }
+
+        // التأكد من أن العامل الذي يحاول الحذف هو مالك الإعلان
+        if (announcement.email !== email) {
+            return res.status(403).json({ message: "You can only delete your own announcements." });
+        }
+
+        // حذف الإعلان
+        await works.findByIdAndDelete(id);
+
+        res.status(200).json({ message: "Announcement deleted successfully." });
+    } catch (error) {
+        console.error('Error in deleting announcement:', error);
         res.status(500).json({ message: 'Server error occurred.', error: error.message });
     }
 };
@@ -400,8 +571,8 @@ const notification = async (req, res) => {
        if (role === 'Worker') {
        
                 // استرجاع البريد الإلكتروني للمستخدم من التوكن
-                const userEmail = req.user.email;
-                
+                const userEmail = email;
+                console.log(userEmail);
                 // 1. البحث عن الطلبات الخاصة بالعامل والتي حالتها "Pending"
                 const requestsForWorker = await requests.find({
                     workerEmail: userEmail, // التصفية باستخدام البريد الإلكتروني للعامل
@@ -414,7 +585,8 @@ const notification = async (req, res) => {
                 const reportsForWorker = await DailyReport.find({
                     reporter_email: userEmail // البحث باستخدام البريد الإلكتروني للعامل
                 });
-        
+                console.log('Requests for Worker:', requestsForWorker);
+
                 // 3. إذا لم تكن هناك طلبات أو تقارير
                 if (!requestsForWorker.length && !reportsForWorker.length) {
                     return res.status(404).json({ 
@@ -425,26 +597,25 @@ const notification = async (req, res) => {
                 // متغير لتخزين الطلبات التي تم تحديث الفيدباك لها
                 let feedbackUpdatedRequests = [];
         
-                // 4. البحث عن الفيدباك لكل تقرير تم تقديمه من العامل
                 for (let report of reportsForWorker) {
                     const feedback = await OwnerFeedback.findOne({ report_id: report._id });
-        
                     if (feedback && feedback.status === 'Pending') {
-                        // تحديث حالة الفيدباك إلى "Reviewed"
                         feedback.status = 'Reviewed';
-                        await feedback.save(); // حفظ التحديث في قاعدة البيانات
-                        feedbackUpdatedRequests.push(feedback); // إضافة الفيدباك الذي تم تحديثه
+                        await feedback.save();
+                        feedbackUpdatedRequests.push(feedback);
                     }
-          
-        
-                // إرسال الاستجابة مع الطلبات والتقارير والفيدباك الذي تم تحديثه
+                }
+                
+                // إرسال الاستجابة بعد انتهاء الحلقة
                 return res.status(200).json({
                     message: 'Pending requests and reports retrieved successfully!',
-                    requests: requestsForWorker,  // الطلبات التي حالتها "Pending"
-                    feedbacksUpdated: feedbackUpdatedRequests // الفيدباك الذي تم تحديثه إلى "Reviewed"
+                    requests: requestsForWorker,
+                    feedbacksUpdated: feedbackUpdatedRequests
                 });
+                
         
-            } }
+        
+        }
         
         else if (role === 'Owner') {
             try {
@@ -743,58 +914,6 @@ const toggleWorkStatus = async (req, res) => {
     res.status(500).json({ message: 'حدث خطأ أثناء العملية' });
   }
 };
-const generatePDFReport = async (reportData, filePath) => {
-    return new Promise((resolve, reject) => {
-      const doc = new PDFDocument();
-  
-      // التأكد من أن النصوص بتنسيق UTF-8
-      const encodeText = (text) => {
-        try {
-          return decodeURIComponent(escape(text));
-        } catch (e) {
-          return text; // العودة للنص الأصلي في حالة حدوث خطأ
-        }
-      };
-
-      console.log('مسار الملف:', filePath);
-      console.log('بيانات التقرير:', reportData);
-      
-      doc.pipe(fs.createWriteStream(filePath, { encoding: 'utf8' }));
-      
-      // إضافة محتوى التقرير إلى PDF
-      doc.fontSize(12).text(`التقرير الخاص بالأرض: ${encodeText(reportData.land_id) || 'غير محدد'}`, { align: 'center' });
-      doc.text(`نسبة الإنجاز: ${reportData.completion_percentage}%`);
-      doc.text(`المهام المكتملة: ${encodeText(reportData.tasks_completed) || 'غير محدد'}`);
-      
-      const challengesArray = Array.isArray(reportData.challenges) ? reportData.challenges : JSON.parse(reportData.challenges || '[]');
-      doc.text(`التحديات: ${challengesArray.join(', ')}`);
-
-      const recommendations = Array.isArray(reportData.recommendations) ? reportData.recommendations : [];
-      doc.text(`التوصيات: ${recommendations.join(', ') || 'لا توجد توصيات'}`);
-      doc.text(`ساعات العمل: ${reportData.hours_worked || 'غير محدد'}`);
-
-      // التحقق من أن التحليل يحتوي على قيم صحيحة
-      const avgCompletion = reportData.analysis?.avgCompletion || 'غير محدد';
-      const totalHours = reportData.analysis?.totalHours || 'غير محدد';
-      
-      doc.text('التحليل:', { underline: true });
-      doc.text(`معدل الإنجاز: ${avgCompletion}`);
-      doc.text(`إجمالي الساعات: ${totalHours}`);
-  
-      doc.end();
-  
-      doc.on('finish', () => {
-        console.log('تم إنشاء التقرير بنجاح');
-        resolve();
-      });
-  
-      doc.on('error', (error) => {
-        console.error('حدث خطأ أثناء إنشاء التقرير:', error);
-        reject(error);
-      });
-    });
-};
-
 
 // دالة لإنشاء التقرير
 const creatReport = async (req, res) => {
@@ -808,11 +927,7 @@ const creatReport = async (req, res) => {
         return res.status(400).json({ message: 'ساعات العمل يجب أن تكون رقمًا موجبًا' });
     }
     try {
-   // التأكد من وجود المجلد قبل إنشاء التقرير
-   const dirPath = path.join(__dirname, 'generated_reports');
-   if (!fs.existsSync(dirPath)) {
-       fs.mkdirSync(dirPath);  // إنشاء المجلد إذا لم يكن موجودًا
-   }      const token = req.header('authorization');
+      const token = req.header('authorization');
       if (!token) {
         return res.status(401).json({ message: 'التوكن مطلوب للمصادقة.' });
       }
@@ -882,21 +997,6 @@ const creatReport = async (req, res) => {
   
       await newReport.save();
   
-      // إنشاء تقرير PDF وتخزينه في ملف
-      const filePath = path.join(__dirname, 'generated_reports', `cccc.pdf`);
-      console.log('Directory path:', filePath);  // Log the path to verify
-      if (!fs.existsSync(dirPath)) {
-          fs.mkdirSync(dirPath);
-      }
-      await generatePDFReport({
-        completion_percentage,
-        tasks_completed,
-        challenges,
-        recommendations,
-        hours_worked: total_hours_worked,
-        analysis,
-      }, filePath);
-  
       // إرسال الرد مع رابط الملف
       res.status(201).json({
         message: 'تم إضافة التقرير بنجاح',
@@ -907,7 +1007,6 @@ const creatReport = async (req, res) => {
           challenges,
           recommendations,
           hours_worked: total_hours_worked,
-          pdfPath: filePath,  // إرسال مسار الملف المولد
         },
       });
     } catch (error) {
@@ -916,6 +1015,121 @@ const creatReport = async (req, res) => {
     }
   };
 
+  // دالة لإنشاء التقرير PDF
+  const generatePDFReport = async (report, filePath) => {
+    return new Promise((resolve, reject) => {
+      // مسار الخط العربي
+      const arabicFont = "C:\\Users\\tasbeeh\\Desktop\\Growtogether\\GrowTogether\\src\\modules\\workers\\Amiri-Regular.ttf";
+      console.log("Font Path:", arabicFont);  // تأكد من المسار الصحيح
+            console.log("Font Pacccccccth:", arabicFont);  // تأكد من المسار الصحيح
+            console.log("Font Path:", arabicFont);  // إضافة هذا السطر لتأكيد المسار
+      if (fs.existsSync(arabicFont)) {
+        console.log('الخط العربي موجود في المساhhhhhhhhhhhhhhhhhر المحدد!');
+      } else {
+        console.log('الخط العربي غير موجود في noooooooooooooالمسار المحدد:', arabicFont);
+      }
+              
+      
+  
+      console.log('تم العثور على ملف الخط العربي:', arabicFont);
+  
+      try {
+        // إعداد ملف PDF
+        const doc = new PDFDocument({ size: 'A4', margin: 50 });
+        const stream = fs.createWriteStream(filePath);
+        doc.pipe(stream);
+  
+        // تعيين الخط العربي
+        doc.font(arabicFont);
+  
+        // عنوان التقرير
+        doc.fontSize(18).text('تقرير العمل اليومي', { align: 'center' }).moveDown();
+  
+        // محتوى التقرير
+        doc.fontSize(14).text(`رقم الأرض: ${report.land_id}`, { align: 'right' }).moveDown(0.5);
+        doc.text(`تاريخ التقرير: ${new Date(report.report_date).toLocaleDateString('ar-EG')}`, { align: 'right' });
+        doc.text(`نسبة الإنجاز: ${report.completion_percentage}%`, { align: 'right' });
+        doc.text(`ساعات العمل: ${report.hours_worked} ساعة`, { align: 'right' }).moveDown(0.5);
+  
+        // المهام المكتملة
+        doc.fontSize(14).text('المهام المكتملة:', { align: 'right', underline: true });
+        report.tasks_completed.forEach((task, index) => {
+          doc.fontSize(12).text(`${index + 1}. ${task}`, { align: 'right' });
+        });
+        doc.moveDown(0.5);
+  
+        // التحديات
+        doc.fontSize(14).text('التحديات:', { align: 'right', underline: true });
+        report.challenges.forEach((challenge, index) => {
+          doc.fontSize(12).text(`${index + 1}. ${challenge}`, { align: 'right' });
+        });
+        doc.moveDown(0.5);
+  
+        // التوصيات
+        doc.fontSize(14).text('التوصيات:', { align: 'right', underline: true });
+        report.recommendations.forEach((recommendation, index) => {
+          doc.fontSize(12).text(`${index + 1}. ${recommendation}`, { align: 'right' });
+        });
+        doc.moveDown(1);
+  
+        // التوقيع
+        doc.text('------------------------', { align: 'center' });
+        doc.text(`توقيع مقدم التقرير: ${report.reporter_email}`, { align: 'center' });
+  
+        // إنهاء الملف
+        doc.end();
+        stream.on('finish', () => {
+          resolve();
+        });
+      } catch (error) {
+        reject(error);
+      }
+    });
+  };
+  
+  // دالة لإنشاء جميع التقارير
+  const generateAllReports = async () => {
+    try {
+      // استرجاع التقارير الجديدة
+      const reportsToGenerate = await DailyReport.find({ is_pdf_generated: false });
+  
+      if (reportsToGenerate.length === 0) {
+        console.log('لا توجد تقارير جديدة لإنشاء ملفات PDF.');
+        return;
+      }
+  
+      const reportsDir = path.join(__dirname, 'reports');
+      if (!fs.existsSync(reportsDir)) {
+        fs.mkdirSync(reportsDir);
+      }
+  
+      // إنشاء PDF لكل تقرير
+      for (const report of reportsToGenerate) {
+        const fileName = `تقرير_الأرض_${report.land_id}_${Date.now()}.pdf`;
+        const filePath = path.join(reportsDir, fileName);
+  
+        console.log(`جاري إنشاء التقرير: ${fileName}`);
+        await generatePDFReport(report, filePath);
+  
+        // تحديث حالة التقرير في قاعدة البيانات
+        await DailyReport.updateOne({ _id: report._id }, { is_pdf_generated: true });
+  
+        console.log(`تم إنشاء التقرير بنجاح: ${filePath}`);
+      }
+  
+      console.log('تم إنشاء جميع التقارير الجديدة بنجاح.');
+    } catch (error) {
+      console.error('حدث خطأ أثناء إنشاء التقارير:', error);
+    }
+  };
+  
+  // جدولة تشغيل الدالة كل دقيقة
+  cron.schedule('* * * * *', () => {
+    console.log('فحص التقارير الجديدة وإنشاء ملفات PDF...');
+    generateAllReports();
+  });
+  
+  
   const calculateAverageCompletion = async (land_id) => {
     const reports = await DailyReport.find({ land_id });
     if (reports.length === 0) return 0;
@@ -1351,12 +1565,180 @@ const getonechat= async (req, res) => {
         res.status(500).json({ message: "حدث خطأ أثناء استرجاع المحادثة", error: error.message });
     }
 };
+const getWorkers = async (req, res) => {
+    try {
+        const token = req.header('authorization');
+        console.log('Authorization token:', token);
+        if (!token) {
+            return res.status(401).json({ message: 'Authentication token is required.' });
+        }
 
-  
-  
+        const decodedToken = jwt.verify(token, JWT_SECRET_KEY);
+        console.log('Decoded token:', decodedToken);
+        const { email, role } = decodedToken;
+
+        let { landid } = req.params;
+        console.log('Land ID:', landid);
+        if (!landid) {
+            return res.status(400).json({ message: 'Land ID is required.' });
+        }
+        landid = landid.replace(/^:/, '');
+
+        const land = await Land.findById(landid);
+        console.log('Land found:', land);
+        if (!land) {
+            return res.status(404).json({ message: 'Land not found.' });
+        }
+        if (!(role === 'Owner' || email === land.temporaryOwnerEmail)) {
+            return res.status(403).json({ message: 'Access denied.' });
+        }
+
+        const { city, town, streetName } = land;
+        if (!city || !town || !streetName) {
+            return res.status(400).json({ message: 'Land city, town, and street name are required.' });
+        }
+
+        const activity = await Activity.findOne({ name: land.workType });
+        console.log('Activity found:', activity);
+        if (!activity) {
+            return res.status(404).json({ message: 'Activity not found for this land.' });
+        }
+
+        const { tools = [], skills = [] } = activity.details;
+        const generalSkills = ["عمال موسميون", "عمال يدوية", "عمال زيتون"];
+        const generalTools = ["مقص زيتون", "سلة", "أدوات يدوية"];
+
+        // الحصول على معايير البحث من الرابط
+        const { tool, skill, cityFilter, townFilter, streetFilter } = req.query;
+        console.log('Query parameters:', { tool, skill, cityFilter, townFilter, streetFilter });
+
+        // إذا لم يتم تحديد أي معايير فلترة، اعرض جميع العمال
+        if (!tool && !skill && !cityFilter && !townFilter && !streetFilter) {
+            // استرجاع جميع العمال
+            const workers = await works.find();
+            console.log('Found workers:', workers);
+            return res.status(200).json({ workers, count: workers.length });
+        }
+
+        let workers;
+        if (tool) {
+            console.log('Searching with tool:', tool);
+            workers = await works.find({
+                tools: { $regex: tool, $options: 'i' },  // استخدام regex مع خيار تجاهل الحساسية لحالة الأحرف
+                $or: [
+                    { skills: { $in: skills } },
+                    { tools: { $in: tools } },
+                    { skills: { $in: generalSkills } },
+                    { tools: { $in: generalTools } },
+                ]
+            });
+        }
+        
+        else if (skill) {
+            console.log('Searching with skill:', skill);
+            workers = await works.find({
+                skills: { $in: [skill] },
+                $or: [
+                    { skills: { $in: skills } },
+                    { tools: { $in: tools } },
+                    { skills: { $in: generalSkills } },
+                    { tools: { $in: generalTools } },
+                ]
+            });
+        }
+        else {
+            // بناء معايير البحث للمدينة، البلدة أو الشارع
+            const cityCriteria = cityFilter ? { areas: { $regex: cityFilter, $options: 'i' } } : { areas: { $regex: city, $options: 'i' } };
+            const townCriteria = townFilter ? { areas: { $regex: townFilter, $options: 'i' } } : { areas: { $regex: town, $options: 'i' } };
+            const streetCriteria = streetFilter ? { areas: { $regex: streetFilter, $options: 'i' } } : { areas: { $regex: streetName, $options: 'i' } };
+            console.log('City Criteria:', cityCriteria);
+            console.log('Town Criteria:', townCriteria);
+            console.log('Street Criteria:', streetCriteria);
+
+            workers = await works.find({
+                $and: [
+                    cityCriteria,    // المدينة
+                    townCriteria,    // البلدة
+                    streetCriteria,  // الشارع
+                    { $or: [
+                        { skills: { $in: skills } },
+                        { tools: { $in: tools } },
+                        { skills: { $in: generalSkills } },
+                        { tools: { $in: generalTools } },
+                    ]}
+                ]
+            });
+        }
+
+        console.log('Found workers:', workers);
+        if (workers.length === 0) {
+            console.log('No workers found with the given filters.');
+            return res.status(404).json({ message: 'No workers found matching the requirements.' });
+        }
+
+        return res.status(200).json({ workers, count: workers.length });
+
+    } catch (error) {
+        console.error('Error retrieving workers:', error);
+        return res.status(500).json({ message: 'Server error occurred.' });
+    }
+};
+
+// راوتر للحصول على تفاصيل العامل حسب ID
+const getWorkerDetails = async (req, res) => {
+    try {
+        const token = req.header('authorization');
+        console.log('Authorization token:', token);
+
+        if (!token) {
+            return res.status(401).json({ message: 'Authentication token is required.' });
+        }
+
+        const decodedToken = jwt.verify(token, JWT_SECRET_KEY);
+        console.log('Decoded token:', decodedToken);
+        const { email, role } = decodedToken;
+
+        // استخراج معرّف العامل من الرابط
+        const { workerId } = req.params;
+        console.log('Worker ID:', workerId);
+        if (!workerId) {
+            return res.status(400).json({ message: 'Worker ID is required.' });
+        }
+
+        // البحث عن العامل باستخدام الـ ID
+        const worker = await works.findById(workerId);
+        console.log('Worker found:', worker);
+
+        if (!worker) {
+            return res.status(404).json({ message: 'Worker not found.' });
+        }
+
+        // // هنا يمكنك إضافة شروط معينة مثل التحقق من الصلاحيات إذا كان ذلك مطلوبًا
+        // // على سبيل المثال، تحقق من كون العامل ينتمي إلى الأرض التي يملكها المستخدم
+        // const { landId } = worker;
+        // const land = await Land.findById(landId);
+        //console.log('Land found for worker:', land);
+
+        // if (!land) {
+        //     return res.status(404).json({ message: 'Land associated with worker not found.' });
+        // }
+
+       
+        return res.status(200).json({ worker });
+    } catch (error) {
+        console.error('Error retrieving worker details:', error);
+        return res.status(500).json({ message: 'Server error occurred.' });
+    }
+};
+
+// إضافة راوتر لهذا المسار
+
+
+
+
   module.exports={ feedbacksystem,search,sendMessage,getonechat,
-    toggleWorkStatus,creatReport,
-    getLandsForGuarantor,updateWorkerProfile,
-    notification,respondToRequest,
-    announce,getLands,weathernotification,
+    toggleWorkStatus,creatReport,updateAnnouncement,
+    getLandsForGuarantor,updateWorkerProfile,getMyAnnouncements,
+    notification,respondToRequest,getWorkers,getWorkerDetails,
+    announce,getLands,weathernotification,deleteAnnouncement,
     getAllAnnouncements,joinland,getChats}
