@@ -1,0 +1,90 @@
+Flutter crash report.
+Please report a bug at https://github.com/flutter/flutter/issues.
+
+## command
+
+flutter run --machine --start-paused -d chrome --devtools-server-address http://127.0.0.1:9100/ --target C:\Users\Amani Odeh\StudioProjects\ggrow_together\lib\main.dart
+
+## exception
+
+StateError: Bad state: No running isolate (inspector is not set).
+
+```
+#0      ChromeProxyService.inspector (package:dwds/src/services/chrome_proxy_service.dart:78:7)
+#1      _waitForResumeEventToRunMain.<anonymous closure> (package:dwds/src/dwds_vm_client.dart:308:30)
+#2      _rootRunUnary (dart:async/zone.dart:1415:13)
+#3      _CustomZone.runUnary (dart:async/zone.dart:1308:19)
+#4      _CustomZone.runUnaryGuarded (dart:async/zone.dart:1217:7)
+#5      _BufferingStreamSubscription._sendData (dart:async/stream_impl.dart:365:11)
+#6      _DelayedData.perform (dart:async/stream_impl.dart:541:14)
+#7      _PendingEvents.handleNext (dart:async/stream_impl.dart:646:11)
+#8      _PendingEvents.schedule.<anonymous closure> (dart:async/stream_impl.dart:617:7)
+#9      StackZoneSpecification._run (package:stack_trace/src/stack_zone_specification.dart:207:15)
+#10     StackZoneSpecification._registerCallback.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:114:48)
+#11     _rootRun (dart:async/zone.dart:1391:47)
+#12     _CustomZone.run (dart:async/zone.dart:1301:19)
+#13     _CustomZone.runGuarded (dart:async/zone.dart:1209:7)
+#14     _CustomZone.bindCallbackGuarded.<anonymous closure> (dart:async/zone.dart:1249:23)
+#15     StackZoneSpecification._run (package:stack_trace/src/stack_zone_specification.dart:207:15)
+#16     StackZoneSpecification._registerCallback.<anonymous closure> (package:stack_trace/src/stack_zone_specification.dart:114:48)
+#17     _rootRun (dart:async/zone.dart:1399:13)
+#18     _CustomZone.run (dart:async/zone.dart:1301:19)
+#19     _CustomZone.runGuarded (dart:async/zone.dart:1209:7)
+#20     _CustomZone.bindCallbackGuarded.<anonymous closure> (dart:async/zone.dart:1249:23)
+#21     _microtaskLoop (dart:async/schedule_microtask.dart:40:21)
+#22     _startMicrotaskLoop (dart:async/schedule_microtask.dart:49:5)
+#23     _runPendingImmediateCallback (dart:isolate-patch/isolate_patch.dart:118:13)
+#24     _RawReceivePort._handleMessage (dart:isolate-patch/isolate_patch.dart:185:5)
+```
+
+## flutter doctor
+
+```
+[✓] Flutter (Channel stable, 3.24.4, on Microsoft Windows [Version 10.0.22631.4460], locale en-US)
+    • Flutter version 3.24.4 on channel stable at C:\flutter_windows_3.24.3-stable\flutter
+    • Upstream repository https://github.com/flutter/flutter.git
+    • Framework revision 603104015d (5 weeks ago), 2024-10-24 08:01:25 -0700
+    • Engine revision db49896cf2
+    • Dart version 3.5.4
+    • DevTools version 2.37.3
+
+[✓] Windows Version (Installed version of Windows is version 10 or higher)
+
+[✓] Android toolchain - develop for Android devices (Android SDK version 35.0.0)
+    • Android SDK at C:\Users\Amani Odeh\AppData\Local\Android\Sdk
+    • Platform android-35, build-tools 35.0.0
+    • ANDROID_HOME = C:\Users\Amani Odeh\AppData\Local\Android\Sdk
+    • Java binary at: C:\Program Files\Android\Android Studio\jbr\bin\java
+    • Java version OpenJDK Runtime Environment (build 17.0.11+0--11852314)
+    • All Android licenses accepted.
+
+[✓] Chrome - develop for the web
+    • Chrome at C:\Program Files\Google\Chrome\Application\chrome.exe
+
+[✓] Visual Studio - develop Windows apps (Visual Studio Enterprise 2019 16.11.26)
+    • Visual Studio at C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise
+    • Visual Studio Enterprise 2019 version 16.11.33529.622
+    • Windows 10 SDK version 10.0.19041.0
+
+[✓] Android Studio (version 2024.1)
+    • Android Studio at C:\Program Files\Android\Android Studio
+    • Flutter plugin can be installed from:
+      🔨 https://plugins.jetbrains.com/plugin/9212-flutter
+    • Dart plugin can be installed from:
+      🔨 https://plugins.jetbrains.com/plugin/6351-dart
+    • Java version OpenJDK Runtime Environment (build 17.0.11+0--11852314)
+
+[✓] VS Code (version 1.95.3)
+    • VS Code at C:\Users\Amani Odeh\AppData\Local\Programs\Microsoft VS Code
+    • Flutter extension version 3.100.0
+
+[✓] Connected device (3 available)
+    • Windows (desktop) • windows • windows-x64    • Microsoft Windows [Version 10.0.22631.4460]
+    • Chrome (web)      • chrome  • web-javascript • Google Chrome 131.0.6778.86
+    • Edge (web)        • edge    • web-javascript • Microsoft Edge 131.0.2903.63
+
+[✓] Network resources
+    • All expected network resources are available.
+
+• No issues found!
+```
