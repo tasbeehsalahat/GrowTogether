@@ -20,7 +20,12 @@ const { updateWorkerProfile,  announce, getLands,
     deleteAnnouncement,
     getMyAnnouncements,
     getWorkerDetails,
-    sendreq} = require('./worker.controller.js');
+    
+    sendreqtable,
+    state,
+    myschedule,
+    modifyreq,
+    respondTomodify} = require('./worker.controller.js');
     const { Activity, Tool, Skill, Factor } = require('../DB/types.js');  // تأكد من المسار الصحيح
 
 const multer = require('multer');
@@ -51,8 +56,12 @@ router.get('/getchats',authenticateJWT,getChats);
 router.post('/sendmessages/:chatId',authenticateJWT,sendMessage);
 router.get('/chat/:chatId',authenticateJWT,getonechat);
 router.get('/workers/:workerId', authenticateJWT,getWorkerDetails);
+router.patch('/modify-contract/:contractId/:response',authenticateJWT,modifyreq);
+ router.get('/worker-schedule', authenticateJWT,myschedule);
+ router.get('/respond-to-task/:contractId/:response', authenticateJWT, state);
+ router.post('/sendWorkRequest/:landId/:workerId', authenticateJWT,sendreqtable);
+ router.get('/respondTomodify/:requestId/:status',authenticateJWT,respondTomodify);
 
-router.post('/sendWorkRequest/:landId/:workerId', authenticateJWT,sendreq);
 const activityGoals = {
     'حصاد القمح': 'جمع سنابل القمح الناضجة بطريقة فعالة',
     'زراعة المحاصيل': 'ضمان زراعة البذور أو الشتلات بطريقة تحقق نموًا سليمًا',

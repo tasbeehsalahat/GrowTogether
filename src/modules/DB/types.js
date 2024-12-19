@@ -127,6 +127,197 @@ const workerSchema = new mongoose.Schema(
 const Worker = mongoose.model('Worker', workerSchema);
 
 
+const contractSchema = new mongoose.Schema({
+    landId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Land',
+        required: true, // معرف الأرض مطلوب
+    },
+    workerId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Worker',
+        required: true, // معرف العامل مطلوب
+    },
+    ownerEmail: {
+        type: String,
+        required: true, // بريد المالك الإلكتروني مطلوب
+    },
+    taskDescription: {
+        type: String,
+        required: true, // وصف المهمة مطلوب
+    },
+    selectedDay: {
+        type: String,
+        required: true, // اليوم المختار مطلوب
+    },
+    startTime: {
+        type: String,
+        required: true, // وقت البداية مطلوب
+    },
+    endTime: {
+        type: String,
+        required: true, // وقت النهاية مطلوب
+    },
+   workerEmail: {
+        type: String,
+        required: true, // وقت النهاية مطلوب
+    },
+    workerSkills: {
+        type: [String], // مهارات العامل كمصفوفة نصوص
+        default: [],
+    },
+    workerTools: {
+        type: [String], // أدوات العامل كمصفوفة نصوص
+        default: [],
+    },
+    hourlyRate: {
+        type: Number, // أجر العامل بالساعة
+        required: true,
+    },
+    landDescription: {
+        type: String, // وصف الأرض
+        default: '',
+    },
+    landArea: {
+        type: Number, // مساحة الأرض بالمتر المربع
+        default: 0,
+    },
+    landWorkType: {
+        type: String, // نوع العمل المطلوب في الأرض
+        default: '',
+    },
+    landAddress: {
+        type: String, // عنوان الأرض
+        default: '',
+    },
+    landCity: {
+        type: String, // مدينة الأرض
+        default: '',
+    },
+    landTown: {
+        type: String, // بلدة الأرض
+        default: '',
+    },
+    contractMessage: {
+        type: String, // رسالة العقد
+        required: true,
+    },
+    comment: {
+        type: String, // رسالة العقد
+        required: true,
+    },
+    status: {
+        type: String,
+        enum: ['Pending', 'Accepted', 'Rejected','Modified','Extended'], // الحالة يمكن أن تكون واحدة من القيم المحددة
+        default: 'Pending', // الحالة الافتراضية
+    },
+    createdAt: {
+        type: Date,
+        default: Date.now, // وقت إنشاء العقد
+    },
+});
+
+const contract = mongoose.model('Contract', contractSchema);
+
+
+const contractHistory = new mongoose.Schema({
+    landId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Land',
+        required: true, // معرف الأرض مطلوب
+    },
+    contractId:{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'contract',
+        required: true,  
+    },
+    workerId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Worker',
+        required: true, // معرف العامل مطلوب
+    },
+    ownerEmail: {
+        type: String,
+        required: true, // بريد المالك الإلكتروني مطلوب
+    },
+    taskDescription: {
+        type: String,
+        required: true, // وصف المهمة مطلوب
+    },
+    selectedDay: {
+        type: String,
+        required: true, // اليوم المختار مطلوب
+    },
+    startTime: {
+        type: String,
+        required: true, // وقت البداية مطلوب
+    },
+    endTime: {
+        type: String,
+        required: true, // وقت النهاية مطلوب
+    },
+   workerEmail: {
+        type: String,
+        required: true, // وقت النهاية مطلوب
+    },
+    workerSkills: {
+        type: [String], // مهارات العامل كمصفوفة نصوص
+        default: [],
+    },
+    workerTools: {
+        type: [String], // أدوات العامل كمصفوفة نصوص
+        default: [],
+    },
+    hourlyRate: {
+        type: Number, // أجر العامل بالساعة
+        required: true,
+    },
+    landDescription: {
+        type: String, // وصف الأرض
+        default: '',
+    },
+    landArea: {
+        type: Number, // مساحة الأرض بالمتر المربع
+        default: 0,
+    },
+    landWorkType: {
+        type: String, // نوع العمل المطلوب في الأرض
+        default: '',
+    },
+    landAddress: {
+        type: String, // عنوان الأرض
+        default: '',
+    },
+    landCity: {
+        type: String, // مدينة الأرض
+        default: '',
+    },
+    landTown: {
+        type: String, // بلدة الأرض
+        default: '',
+    },
+    contractMessage: {
+        type: String, // رسالة العقد
+        required: true,
+    },
+    comment: {
+        type: String, // رسالة العقد
+        required: true,
+    },
+    status: {
+        type: String,
+        enum: ['Pending', 'Accepted', 'Rejected','Modified','Extended'], // الحالة يمكن أن تكون واحدة من القيم المحددة
+        default: 'Pending', // الحالة الافتراضية
+    },
+    createdAt: {
+        type: Date,
+        default: Date.now, // وقت إنشاء العقد
+    },
+});
+
+const conHistory = mongoose.model('ConHistory', contractHistory);
+
+
 const tokenSchema = new mongoose.Schema({
     email: { type: String, required: true, unique: true }, // البريد الإلكتروني للمستخدم
     token: { type: String, required: true },              // التوكن JWT
@@ -402,7 +593,17 @@ const Work = new mongoose.Schema({
 });
 
 const works = mongoose.model('Works', Work);
-
+const workerScheduleSchema = new mongoose.Schema({
+    workerId: String,
+    taskId: String,
+    taskDescription: String,
+    startTime: String,
+    endTime: String,
+    status: { type: String, default: 'Pending' }
+  });
+  
+  const WorkerSchedule = mongoose.model('WorkerSchedule', workerScheduleSchema);
+  
 
 
 
@@ -650,4 +851,7 @@ const Activity = mongoose.model('Activity', activitySchema);
 
   
 
-module.exports ={OwnerFeedback,Chat, Activity, requests,DailyReport,WorkAnnouncement,Owner,Worker,Token,Land,works,Company,Work_analysis,Keywords,keywordsSchema};
+module.exports ={OwnerFeedback,Chat, Activity,contract,
+     WorkerSchedule, requests,DailyReport,WorkAnnouncement,
+     Owner,Worker,Token,Land,works,Company,Work_analysis,Keywords,conHistory,
+     keywordsSchema};

@@ -9,7 +9,9 @@ const path = require('path');
 const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
 const cron = require('node-cron'); 
-const {Owner,Worker,DailyReport,Activity,OwnerFeedback,Chat,Land,works,requests,WorkAnnouncement} = require('../DB/types.js');  // تأكد من أن المسار صحيح
+const {Owner,Worker,DailyReport,contract,
+    Activity,OwnerFeedback, WorkerSchedule,conHistory,
+    Chat,Land,works,requests,WorkAnnouncement} = require('../DB/types.js');  // تأكد من أن المسار صحيح
 const JWT_SECRET_KEY = '1234#';  // نفس المفتاح السري الذي ستستخدمه للتحقق من التوكن
 const updateWorkerProfile = async (req, res) => {
     try {
@@ -480,118 +482,254 @@ const sendEmailNotification = async (toEmail, subject, weatherMessage) => {
         console.error('Error sending email:', error.message);
     }
 };
-const sendreq = async (req, res) => {
-    const { landId, workerId } = req.params; // استخراج معرف الأرض ومعرف العامل من الرابط
-    const { taskDescription, selectedDay, startTime, endTime } = req.body;
 
-    // استخراج التوكن من الهيدر
-    const token = req.header('authorization'); // الحصول على التوكن من الهيدر
+///يتم هون انشاء طلب وارساله عبر الايميل وبعمل فحص دايما وهيك انه الموعد يكون محدد 
+//هسة لازم اكمل انه من عند هاي النقطر ابني انه بدل ايميل يكون نوتفيكشن ويظهر للعامل ويطلعله التفاصيل ويعطيه ت
+//  عديل انه مثلا المهمة هاي بقدر اعملها ب 5 ساعات وهيك وبعدين بيتم يرجع ارساله وبشوف ان بوافق عليه ولا لا
+//  وكمان شغلة انه اذا تمم الموافقة لازم يطلع انه محجوز بالجدول وهيك 
+const sendreqtable = async (req, res) => {
+    const { landId, workerId } = req.params;
+    const { taskDescription, selectedDay, startTime, endTime } = req.body;
+    const token = req.header('authorization');
 
     if (!token) {
+        console.log('Authentication token is missing.');
         return res.status(401).json({ message: 'Authentication token is required.' });
     }
+    const worker = await works.findOne({ _id: workerId });
 
+    // التحقق من وجود العامل
+    if (!worker) {
+        return res.status(404).json({ message: 'Worker not found.' });
+    }
+    
+    // استخراج البريد الإلكتروني من العامل المسترجع
+    const workerEmail = Worker.email; // الوصول إلى البريد الإلكتروني من الكائن `worker`
+    console.log("Worker Email:");
+    console.log(workerEmail);
+    
     try {
-        // فك تشفير التوكن والتحقق منه
+            // استخراج البريد الإلكتروني من البيانات المسترجعة
+
+
+        console.log('Decoding token...');
         const decodedToken = jwt.verify(token, JWT_SECRET_KEY);
-        const { email, role } = decodedToken; // استخراج البريد الإلكتروني والدور من التوكن
+        const { email, role } = decodedToken;
 
-        req.user = { email, role }; // تخزين بيانات المستخدم في req.user
+        req.user = { email, role };
+        console.log(`Decoded token: email=${email}, role=${role}`);
 
-        // العثور على الأرض بناءً على landId
+        // البحث عن الأرض
+        console.log(`Fetching land with ID: ${landId}`);
         const land = await Land.findOne({ _id: landId });
-
         if (!land) {
+            console.log('Land not found.');
             return res.status(404).json({ message: 'Land not found.' });
         }
+        console.log(`Land found: ${JSON.stringify(land)}`);
 
-        // التحقق من صلاحية الأونر (المالك أو المالك المؤقت)
+        // التحقق من صلاحيات المستخدم
         if (!(role === 'Owner' || email === land.temporaryOwnerEmail)) {
-            return res.status(403).json({ message: 'Access denied. Only Owners or temporary owners can access this data.' });
+            console.log('Access denied. User is not authorized.');
+            return res.status(403).json({ message: 'Access denied.' });
         }
+        console.log('User is authorized.');
 
-        // البحث عن العامل باستخدام _id
-        const work = await works.findOne({ _id: workerId }); // تم التعديل هنا لاستخدام _id
-
+        // البحث عن العامل
+        console.log(`Fetching worker with ID: ${workerId}`);
+        const work = await works.findOne({ _id: workerId });
         if (!work) {
+            console.log('Worker not found in works.');
             return res.status(404).json({ message: 'Worker not found in works.' });
         }
+        console.log(`Work found: ${JSON.stringify(work)}`);
 
-        const { email: workerEmail } = work; // استخراج البريد الإلكتروني من جدول "works"
-
+        const { email: workerEmail } = work;
+        console.log(`Fetching worker details with email: ${workerEmail}`);
         const worker = await works.findOne({ email: workerEmail });
         if (!worker) {
-            return res.status(404).json({ message: 'Worker not found.' });
+            console.log('Worker details not found.');
+            return res.status(404).json({ message: 'Worker details not found.' });
         }
+        console.log(`Worker details: ${JSON.stringify(worker)}`);
 
-        // إضافة فحص إذا كانت availableDays موجودة ومصفوفة
+        // التحقق من التوفر
+        console.log(`Checking worker availability on ${selectedDay}`);
         if (!Array.isArray(worker.availableDays) || !worker.availableDays.includes(selectedDay)) {
+            console.log(`The worker is not available on ${selectedDay}.`);
             return res.status(400).json({ message: `The worker is not available on ${selectedDay}.` });
         }
 
         const availableHours = worker.workingHours.filter(hour => hour.day === selectedDay);
+        console.log(`Available hours on ${selectedDay}: ${JSON.stringify(availableHours)}`);
         if (availableHours.length === 0) {
-            return res.status(400).json({ message: `The worker has no working hours on ${selectedDay}.` });
+            console.log('No available hours on this day.');
+            return res.status(400).json({ message: 'No available hours on this day.' });
         }
 
+        console.log('Validating requested time...');
         const isTimeValid = availableHours.some(hour => {
             const workerStart = moment(hour.startTime, 'h:mm A');
             const workerEnd = moment(hour.endTime, 'h:mm A');
             const requestedStart = moment(startTime, 'h:mm A');
             const requestedEnd = moment(endTime, 'h:mm A');
 
-            return requestedStart.isBetween(workerStart, workerEnd, null, '[)') && requestedEnd.isBetween(workerStart, workerEnd, null, '[)');
+            return (
+                requestedStart.isBetween(workerStart, workerEnd, null, '[)') &&
+                requestedEnd.isBetween(workerStart, workerEnd, null, '[)')
+            );
         });
 
         if (!isTimeValid) {
+            console.log(`The requested time is outside of the available working hours on ${selectedDay}.`);
             return res.status(400).json({
-                message: `The requested time is outside of the available working hours of ${selectedDay} (Available: ${availableHours.map(hour => `${hour.startTime} - ${hour.endTime}`).join(', ')})`,
+                message: `The requested time is outside of the available working hours on ${selectedDay}.`,
             });
         }
+        console.log('Requested time is valid.');
 
-        // رسالة العقد مع تحديد اليوم والمهمة
+        // إنشاء العقد
+        console.log('Creating contract...');
         const contractMessage = `
         عقد العمل بين صاحب الأرض والعامل: ${worker.name}
-        
-        تفاصيل المهمة:
-        - المهمة المطلوبة: ${taskDescription}
+        - المهمة: ${taskDescription}
         - اليوم: ${selectedDay}
         - الوقت: من ${startTime} إلى ${endTime}
-        
-        تفاصيل العامل:
-        - الاسم: ${worker.name}
-        - التخصص: ${worker.skills.join(', ')}
-        - المعدّات: ${worker.tools.join(', ')}
-        - الأجر: ${worker.hourlyRate} دولار في الساعة
-        
-        تفاصيل الأرض:
-        - الوصف: ${land.description}
-        - المساحة: ${land.area} متر مربع
-        - نوع العمل: ${land.workType}
-        - العنوان: ${land.formattedAddress || 'عنوان غير متوفر'}
-        - رابط Google Maps: ${land.googleMapsLink || 'رابط غير متوفر'}
-        - المنطقة: ${land.city || 'مدينة غير محددة'}, ${land.town || 'البلدة غير محددة'}
-        
-        إذا كنت موافقًا على الشروط، يرجى التوقيع والعودة إلينا.
+        - الأجر: ${worker.hourlyRate} دولار
+        - الموقع: ${land.formattedAddress || 'غير متوفر'}
         `;
 
-        // إرسال البريد الإلكتروني
-        await sendEmailNotification(worker.email, 'طلب العمل الجديد', contractMessage);
-
-        return res.status(200).json({
-            message: 'Work request sent successfully.',
+        const newContract = new contract({
+            landId,
+            workerId,
+            ownerEmail: email,
+            taskDescription,
+            selectedDay,
+            startTime,
+            endTime,
+            workerEmail,
+           workerSkills: worker.skills,
+            workerTools: worker.tools,
+            hourlyRate: worker.hourlyRate,
+            landDescription: land.description,
+            landArea: land.area,
+            landWorkType: land.workType,
+            landAddress: land.formattedAddress || 'غير متوفر',
+            landCity: land.city || 'غير محدد',
+            landTown: land.town || 'غير محددة',
             contractMessage,
+            status: 'Pending',
+            comment:'nothing'
         });
 
+        await newContract.save();
+        
+        // حفظ النسخة الحالية من العقد في تاريخ العقود قبل التعديل
+        const contractBackup = new conHistory({
+            contractId: newContract._id, // الربط مع العقد الرئيسي
+            landId,
+            workerId,
+            ownerEmail: email,
+            taskDescription,
+            selectedDay,
+            startTime,
+            endTime,
+            workerEmail,
+           workerSkills: worker.skills,
+            workerTools: worker.tools,
+            hourlyRate: worker.hourlyRate,
+            landDescription: land.description,
+            landArea: land.area,
+            landWorkType: land.workType,
+            landAddress: land.formattedAddress || 'غير متوفر',
+            landCity: land.city || 'غير محدد',
+            landTown: land.town || 'غير محددة',
+            contractMessage,
+            status: 'Pending',
+            comment:'nothing'
+        });
+
+
+        await contractBackup.save();
+        console.log(`Contract saved successfully: ${JSON.stringify(newContract)}`);
+
+        return res.status(200).json({
+            message: 'Work request saved successfully.',
+            contract: newContract,
+        });
     } catch (error) {
-        console.error(error);
+        console.error('An error occurred:', error);
         return res.status(500).json({ message: 'Internal server error.' });
     }
 };
-///يتم هون انشاء طلب وارساله عبر الايميل وبعمل فحص دايما وهيك انه الموعد يكون محدد 
-//هسة لازم اكمل انه من عند هاي النقطر ابني انه بدل ايميل يكون نوتفيكشن ويظهر للعامل ويطلعله التفاصيل ويعطيه ت
-//  عديل انه مثلا المهمة هاي بقدر اعملها ب 5 ساعات وهيك وبعدين بيتم يرجع ارساله وبشوف ان بوافق عليه ولا لا
-//  وكمان شغلة انه اذا تمم الموافقة لازم يطلع انه محجوز بالجدول وهيك 
+const state = async (req, res) => {
+    const { contractId, response } = req.params; // استلام رقم العقد والرد
+    const token = req.header('authorization'); // التوكن المستلم من رأس الطلب
+
+    if (!token) {
+        console.log('Authentication token is missing.');
+        return res.status(401).json({ message: 'Authentication token is required.' });
+    }
+
+    try {
+        // التحقق من صحة التوكن واستخراج البيانات
+        const decoded = jwt.verify(token, JWT_SECRET_KEY); // هنا يجب عليك استخدام السر الخاص بتوقيع التوكن
+        const userEmail = decoded.email; // استخراج البريد الإلكتروني من التوكن
+
+        // البحث عن العامل باستخدام البريد الإلكتروني المستخرج من التوكن
+        const worker = await Worker.findOne({ email: userEmail });
+
+        // التحقق من وجود العامل
+        if (!worker) {
+            return res.status(404).json({ message: 'Worker not found.' });
+        }
+
+        // البحث عن العقد في قاعدة البيانات باستخدام contractId
+        const contractc = await contract.findOne({ _id: contractId });
+
+        if (!contractc) {
+            return res.status(404).json({ message: 'Contract not found.' });
+        }
+
+        // التأكد من أن البريد الإلكتروني في العقد يتطابق مع البريد الإلكتروني في التوكن
+        if (contractc.workerEmail !== userEmail) {
+            return res.status(403).json({ message: 'Unauthorized: You are not the worker assigned to this contract' });
+        }
+
+        // التحقق من نوع الرد (قبول، رفض، تمديد)
+        if (response === 'accept') {
+            contractc.status = 'Accepted';
+            // إنشاء جدول أعمال للعامل عند قبول المهمة
+            const schedule = new WorkerSchedule({
+                workerId: contractc.workerId,
+                taskId: contractc.contractId,
+                taskDescription: contractc.taskDescription,
+                startTime: contractc.startTime,
+                endTime: contractc.endTime,
+                status: 'Pending' // يمكن تغييره بعد إتمام المهمة
+            });
+            await schedule.save();  // حفظ جدول الأعمال للعامل
+
+        } else if (response === 'reject') {
+            contract.status = 'Rejected';
+        } else if (response === 'extend') {
+            contract.status = 'Extended';
+            // هنا يمكن تعديل الوقت أو إضافة منطق آخر
+        } else {
+            return res.status(400).json({ message: 'Invalid response type. Use "accept", "reject", or "extend".' });
+        }
+
+        // حفظ التعديلات في العقد
+        await contractc.save();
+
+        return res.status(200).json({ message: `Contract ${response} successfully.`, contractc });
+
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ message: 'Server error.' });
+    }
+};
+ 
 
 const getWeather = async (latitude, longitude) => {
     try {
@@ -690,6 +828,14 @@ const notification = async (req, res) => {
                 // استرجاع البريد الإلكتروني للمستخدم من التوكن
                 const userEmail = email;
                 console.log(userEmail);
+                const requestworkers = await contract.find({
+                    workerEmail: userEmail,  // التصفية باستخدام البريد الإلكتروني للمستخدم
+                    status: { $in: ['Accepted', 'Rejected','Pending'] }});
+
+                const responseworkers = await contract.find({
+                    ownerEmail: userEmail,  // التصفية باستخدام البريد الإلكتروني للمستخدم
+                    status: { $in: ['Accepted', 'Rejected', 'Extended','Modified'] }  // التصفية باستخدام مجموعة الحالات
+                });
                 // 1. البحث عن الطلبات الخاصة بالعامل والتي حالتها "Pending"
                 const requestsForWorker = await requests.find({
                     workerEmail: userEmail, // التصفية باستخدام البريد الإلكتروني للعامل
@@ -727,7 +873,9 @@ const notification = async (req, res) => {
                 return res.status(200).json({
                     message: 'Pending requests and reports retrieved successfully!',
                     requests: requestsForWorker,
-                    feedbacksUpdated: feedbackUpdatedRequests
+                    feedbacksUpdated: feedbackUpdatedRequests,
+re:requestworkers,
+res:responseworkers
                 });
                 
         
@@ -784,7 +932,39 @@ const notification = async (req, res) => {
         return res.status(500).json({ message: 'Server error occurred.' });
     }
 };
+const myschedule=async (req, res) => {
+    const token = req.header('authorization');  // استلام التوكن من الهيدر
 
+    if (!token) {
+        console.log('Authentication token is missing.');
+        return res.status(401).json({ message: 'Authentication token is required.' });
+    }
+
+    try {
+        // التحقق من صحة التوكن واستخراج البيانات منه
+        const decoded = jwt.verify(token, JWT_SECRET_KEY);  // استخدم السر الذي تستخدمه لتوقيع التوكن
+        const userEmail = decoded.email;  // البريد الإلكتروني المستخرج من التوكن
+
+        // التحقق من وجود العامل في قاعدة البيانات باستخدام البريد الإلكتروني
+        const worker = await works.findOne({ email: userEmail });
+
+        if (!worker) {
+            return res.status(404).json({ message: 'Worker not found.' });
+        }
+
+        // الحصول على جدول الأعمال للعامل باستخدام workerId
+        const schedules = await WorkerSchedule.find({ workerId: worker._id });
+
+        if (schedules.length === 0) {
+            return res.status(404).json({ message: 'No schedule found for this worker.' });
+        }
+
+        return res.status(200).json({ schedules });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ message: 'Server error.' });
+    }
+};
 const respondToRequest = async (req, res) => {
     try {
         console.log('Received request to respond to request.');
@@ -1847,14 +2027,155 @@ const getWorkerDetails = async (req, res) => {
         return res.status(500).json({ message: 'Server error occurred.' });
     }
 };
+const modifyreq = async (req, res) => {
+    const token = req.header('authorization');  // استلام التوكن من الهيدر
 
-// إضافة راوتر لهذا المسار
+    if (!token) {
+        console.log('Authentication token is missing.');
+        return res.status(401).json({ message: 'Authentication token is required.' });
+    }
+
+    const { contractId, response } = req.params;  // استلام ID العقد
+    const { newStartTime, newEndTime, reason } = req.body;  // استلام الرد من العامل (تمديد أو سبب التعديل)
+
+    try {
+        // التحقق من صحة التوكن واستخراج البيانات منه
+        const decoded = jwt.verify(token, JWT_SECRET_KEY);
+        const userEmail = decoded.email;  // البريد الإلكتروني المستخرج من التوكن
+
+        // البحث عن العقد في قاعدة البيانات باستخدام contractId
+        const contractc = await contract.findOne({ _id: contractId });
+
+        if (!contractc) {
+            return res.status(404).json({ message: 'Contract not found.' });
+        }
+
+        // التحقق من أن البريد الإلكتروني في التوكن يتطابق مع العامل في العقد
+        if (contractc.workerEmail !== userEmail) {
+            return res.status(403).json({ message: 'Unauthorized: You are not the worker assigned to this contract.' });
+        }
+
+        // التحقق من نوع الرد
+        if (response === 'extend') {
+            // إذا كانت الحالة "تمديد"، نقوم بتعديل وقت بداية ونهاية المهمة
+            if (!newStartTime || !newEndTime) {
+                return res.status(400).json({ message: 'New start and end times are required for extension.' });
+            }
+
+            contractc.startTime = newStartTime;
+            contractc.endTime = newEndTime;
+            contractc.status = 'Extended';  // تغيير الحالة إلى "تمديد"
+            contractc.comment = reason || 'No specific reason provided'; // إضافة سبب التعديل (اختياري)
+        } else if (response === 'modify') {
+            // إذا كانت الحالة "تعديل"، نقوم بتعديل تفاصيل أخرى للعقد بناءً على ما يطلبه العامل
+            if (reason) {
+                contractc.comment = reason; // تعديل السبب أو التفاصيل المطلوبة
+            }
+        } else {
+            return res.status(400).json({ message: 'Invalid response type. Use "extend" or "modify".' });
+        }
+
+        // حفظ التعديلات في العقد
+        await contractc.save();
+
+        return res.status(200).json({ message: `Contract ${response} successfully.`, contract: contractc });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ message: 'Server error.' });
+    }
+};
 
 
+const respondTomodify = async (req, res) => {
+    try {
+        console.log('Received request to respond to request.');
+
+        // استخرج التوكن من الهيدر
+        const token = req.header('authorization');
+        if (!token) {
+            console.log('No token provided.');
+            return res.status(401).json({ message: 'Authentication token is required.' });
+        }
+
+        // فك تشفير التوكن والتحقق منه
+        const decodedToken = jwt.verify(token, JWT_SECRET_KEY);
+        const { email, role } = decodedToken;
+
+        if (role !== 'Worker') {
+            return res.status(403).json({ message: 'Access denied. Only Workers can respond to requests.' });
+        }
+
+        // ابحث عن العامل باستخدام البريد الإلكتروني
+        const worker = await Worker.findOne({ email });
+        if (!worker) {
+            return res.status(404).json({ message: 'Worker not found.' });
+        }
+
+        const { requestId, status } = req.params;
+
+        if (!requestId || !status || (status !== 'accept' && status !== 'reject')) {
+            return res.status(400).json({ message: 'Invalid request. Request ID and valid status are required.' });
+        }
+
+        // العثور على الطلب بناءً على الـ requestId
+        const request = await contract.findById(requestId);
+        if (!request) {
+            return res.status(404).json({ message: 'Request not found.' });
+        }
+
+        // تحديث حالة الطلب بناءً على القرار
+        request.status = status === 'accept' ? 'Accepted' : 'Rejected';
+        request.workerEmail = email;
+
+        // إذا كان الطلب مرتبطًا بعقد
+        if (request) {
+            const contractc = await contract.findById({_id:requestId});
+            if (!contractc) {
+                return res.status(404).json({ message: 'Contract not found.' });
+            }
+
+            if (status === 'reject') {
+                // العثور على النسخة القديمة من العقد في جدول الأرشيف
+                const archivedContract = await conHistory.findOne({ contractId:requestId });
+
+                if (archivedContract) {
+                    // استرجاع النسخة القديمة من العقد
+                    await contractc.updateOne({ _id:requestId}, { $set: archivedContract.toObject() });
+
+                    return res.status(200).json({
+                        message: 'Request rejected. Contract reverted to its original state.',
+                        contract: archivedContract
+                    });
+                } else {
+                    return res.status(400).json({ message: 'Original archived contract not found.' });
+                }
+            } else {
+                // إذا كانت الحالة "قبول"، لا نقوم بأي تغيير في العقد
+                return res.status(200).json({
+                    message: 'Request accepted. Contract remains the same.',
+                    contract: contractc
+                });
+            }
+        }
+
+        // تحديث الطلب في حالة القبول أو الرفض
+        await request.save();
+
+        // إرجاع استجابة مع الحالة الجديدة
+        return res.status(200).json({
+            message: `Request ${status}ed successfully.`,
+            request: request,
+        });
+    } catch (error) {
+        console.error('Error responding to request:', error);
+        return res.status(500).json({ message: 'Server error occurred.' });
+    }
+};
 
 
-  module.exports={ feedbacksystem,search,sendMessage,getonechat,
-    toggleWorkStatus,creatReport,updateAnnouncement,sendreq,
+  module.exports={ feedbacksystem,search,sendMessage,sendreqtable,
+    getonechat,state,myschedule,modifyreq,respondTomodify,
+    toggleWorkStatus,creatReport,updateAnnouncement,
     getLandsForGuarantor,updateWorkerProfile,getMyAnnouncements,
     notification,respondToRequest,getWorkers,getWorkerDetails,
     announce,getLands,weathernotification,deleteAnnouncement,
