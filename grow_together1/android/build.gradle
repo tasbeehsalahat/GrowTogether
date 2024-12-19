@@ -1,3 +1,5 @@
+// هذا الملف هو ملف التكوين الأساسي لمشروعك.
+
 allprojects {
     repositories {
         google()
@@ -5,14 +7,29 @@ allprojects {
     }
 }
 
+// تحديد الدليل الرئيسي للبناء لمشروعات فرعية
 rootProject.buildDir = "../build"
 subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"
 }
+
+// تحديد أن المشروعات الفرعية تعتمد على ":app"
 subprojects {
     project.evaluationDependsOn(":app")
 }
 
+// مهام التنظيف للمشروع
 tasks.register("clean", Delete) {
     delete rootProject.buildDir
+}
+
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        // إضافة الـ Gradle Plugin المناسب لـ Android
+    classpath 'com.android.tools.build:gradle:8.1.0'
+    }
 }

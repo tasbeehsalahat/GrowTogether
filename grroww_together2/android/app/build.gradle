@@ -1,0 +1,46 @@
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id "dev.flutter.flutter-gradle-plugin"
+}
+
+android {
+    namespace = "com.example.grroww_together2"
+    compileSdk = flutter.compileSdkVersion // تأكد أن هذا مضبوط بشكل صحيح في flutter.gradle
+    ndkVersion = flutter.ndkVersion // نفس الشيء هنا
+   compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
+    }
+
+    kotlinOptions {
+        jvmTarget = "11"
+    }
+
+    lintOptions {
+        // Point to the lint baseline file
+        baseline file("lint-baseline.xml")
+    }
+
+
+    defaultConfig {
+        applicationId = "com.example.grroww_together2"
+        minSdkVersion 23 // هذا الحد الأدنى المطلوب
+        targetSdkVersion 33 // إصدار الهدف (الأحدث)
+        versionCode 1
+        versionName "1.0"
+    }
+
+    buildTypes {
+        release {
+            // TODO: Add your own signing config for the release build.
+            // Signing with the debug keys for now, so `flutter run --release` works.
+            signingConfig = signingConfigs.debug
+        }
+    }
+}
+
+flutter {
+    source = "../.." // يحدد مسار مصدر Flutter
+}
