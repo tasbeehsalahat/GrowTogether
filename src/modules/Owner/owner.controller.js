@@ -114,9 +114,7 @@ const addLand = async (req, res) => {
                 return res.status(500).json({ message: "Error retrieving location data.", error });
             }
         } else {
-            if (!area || !description || !streetName || !city || !workType) {
-                return res.status(400).json({ message: 'All fields (area, description, location, workType) are required.' });
-            }
+          
             try {
                 const apiKey = "AlzaSy6XpmiefdiJmjZyZJVslxex6jWWjzxkmrn"; // مفتاح Google Maps API
                 const address = `${streetName}, ${town}, ${city},palestine`;
