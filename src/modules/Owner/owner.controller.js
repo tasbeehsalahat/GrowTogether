@@ -123,7 +123,7 @@ const addLand = async (req, res) => {
 
                 if (response.data.status !== "OK") {
                     return res.status(400).json({
-                        message: "We can't find the site based on the provided address.",
+                        message: "We can't find the site based on tkkkkkkkkkhe provided address.",
                         error: response.data.error_message,
                     });
                 }
