@@ -352,6 +352,7 @@ const login = async (req, res) => {
         message: 'Login successful!',
         token,
         role,
+        email,
         welcomeMessage,
         userData // إرسال بيانات المستخدم
     });
