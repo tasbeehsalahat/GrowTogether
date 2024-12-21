@@ -79,11 +79,7 @@ const getconfirm = async (req, res) => {
 
 
 const signupowner= async (req, res) => {
-    const { error } = signupSchema.validate(req.body, { abortEarly: false });
-    if (error) {
-        const errorMessages = error.details.map(detail => detail.message);
-        return res.status(400).json({ message: 'Validation error', errors: errorMessages });
-    }
+
 
     const { email, password, confirmpassword, ownerName, contactNumber } = req.body;
 
