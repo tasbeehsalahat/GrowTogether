@@ -79,7 +79,11 @@ const getconfirm = async (req, res) => {
 
 
 const signupowner= async (req, res) => {
-
+    const { error } = signupSchema.validate(req.body, { abortEarly: false });
+    if (error) {
+        const errorMessages = error.details.map(detail => detail.message);
+        return res.status(400).json({ message: 'Validation error', errors: errorMessages });
+    }
 
     const { email, password, confirmpassword, ownerName, contactNumber } = req.body;
 
@@ -117,14 +121,7 @@ const signupowner= async (req, res) => {
 };
 const signupWorker = async (req, res) => {
 
-
-    const { error } = workerSignupSchema.validate(req.body, { abortEarly: false });
-    if (error) {
-        const errorMessages = error.details.map(detail => detail.message);
-        return res.status(400).json({ message: 'Validation error', errors: errorMessages });
-    }
-
-    const { email, password, confirmPassword, userName, skills, contactNumber, isGuarantor } = req.body;
+    const { email, password, confirmPassword, userName,  contactNumber, isGuarantor } = req.body;
 
     if (password !== confirmPassword) {
         return res.status(400).json({ message: 'Password and confirm password do not match' });
