@@ -92,24 +92,8 @@ const workerSignupSchema = Joi.object({
         'string.min': `"User Name" should have at least 3 characters`,
         'any.required': `"User Name" is a required field`
     }),
-    skills: Joi.array().items(
-        Joi.string().valid(...allowedSkills).required().messages({
-            'any.only': `"Skill" must be one of the allowed skills`,
-            'any.required': `"Skill" is required`
-        })
-    ).min(1).required().messages({
-        'array.min': `"Skills" must include at least one skill`,
-        'any.required': `"Skills" is a required field`
-    }),
-tools: Joi.array().items(
-    Joi.string().valid(...allowedTools).required().messages({
-        'any.only': `"tool" must be one of the allowed tools`,
-        'any.required': `"tool" is required`
-    })
-).min(1).required().messages({
-    'array.min': `"tools" must include at least one skill`,
-    'any.required': `"tools" is a required field`
-}),
+
+
     contactNumber: Joi.string().pattern(/^[0-9]{10,15}$/).required().messages({
         'string.empty': `"Contact Number" cannot be empty`,
         'string.pattern.base': `"Contact Number" should contain only numbers and be between 10 and 15 digits`,

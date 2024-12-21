@@ -120,6 +120,64 @@ const signupowner= async (req, res) => {
     }
 };
 const signupWorker = async (req, res) => {
+
+
+    const { error } = workerSignupSchema.validate(req.body, { abortEarly: false });
+    if (error) {
+        const errorMessages = error.details.map(detail => detail.message);
+        return res.status(400).json({ message: 'Validation error', errors: errorMessages });
+    }
+
+    const { email, password, confirmPassword, userName, skills, contactNumber, isGuarantor } = req.body;
+
+    if (password !== confirmPassword) {
+        return res.status(400).json({ message: 'Password and confirm password do not match' });
+    }
+
+  
+
+    try {
+        const hashedPassword = await bcrypt.hash(password, 10);
+        
+        const newWorker = new Worker({
+            email,
+            password: hashedPassword,  // Use hashed password
+            userName,
+        
+            contactNumber,
+            isGuarantor: isGuarantor || false // إذا لم يكن تم اختيارها، تكون القيمة False
+            ,
+            registrationCompleted: false // تعيين حالة التسجيل كغير مكتملة
+
+        });
+
+        const savedWorker = await newWorker.save();
+        console.log("Worker added successfully");
+       
+        return res.status(201).json({
+            message: 'Step 1 completed. Proceed to step 2.',
+            workerId: savedWorker._id
+        });
+    } catch (error) {
+        console.error("Error adding worker:", {
+            errorMessage: error.message,
+            stack: error.stack,
+            code: error.code
+        });
+
+        // Check for duplicate email error
+        if (error.code === 11000) {
+            return res.status(409).json({ message: 'Email already exists' });
+        }
+
+        // General error handling
+        return res.status(500).json({ message: 'Error adding worker' });
+    }
+};
+
+const signupwstep2= async (req, res) => {
+    let { workerId } = req.params;
+    const { streetName, town, city, areas ,tools,skills} = req.body;
     const allowedSkills = [
         'خبرة في الحراثة', 
         'خبرة بالآلات الزراعية', 
@@ -158,85 +216,6 @@ const signupWorker = async (req, res) => {
         'مجزّ العشب', 
         'معدات نقل المحاصيل'
     ];
-
-    const { error } = workerSignupSchema.validate(req.body, { abortEarly: false });
-    if (error) {
-        const errorMessages = error.details.map(detail => detail.message);
-        return res.status(400).json({ message: 'Validation error', errors: errorMessages });
-    }
-
-    const { email, password, confirmPassword, userName, skills, tools, contactNumber, isGuarantor } = req.body;
-
-    if (password !== confirmPassword) {
-        return res.status(400).json({ message: 'Password and confirm password do not match' });
-    }
-
-    if (!Array.isArray(skills)) {
-        return res.status(400).json({ message: 'Skills must be an array' });
-    }
-
-    if (!skills.every(skill => allowedSkills.includes(skill))) {
-        return res.status(400).json({ 
-            message: 'اختر مهارات لها علاقة بأعمال الأرض',
-            allowedSkills
-        });
-    }
-
-    if (!Array.isArray(tools)) {
-        return res.status(400).json({ message: 'Tools must be an array' });
-    }
-
-    if (!tools.every(tool => allowedTools.includes(tool))) {
-        return res.status(400).json({ 
-            message: 'اختر أدوات لها علاقة بأعمال الأرض',
-            allowedTools
-        });
-    }
-
-    try {
-        const hashedPassword = await bcrypt.hash(password, 10);
-        
-        const newWorker = new Worker({
-            email,
-            password: hashedPassword,  // Use hashed password
-            userName,
-            skills,
-            tools,
-            contactNumber,
-            isGuarantor: isGuarantor || false // إذا لم يكن تم اختيارها، تكون القيمة False
-            ,
-            registrationCompleted: false // تعيين حالة التسجيل كغير مكتملة
-
-        });
-
-        const savedWorker = await newWorker.save();
-        console.log("Worker added successfully");
-       
-        return res.status(201).json({
-            message: 'Step 1 completed. Proceed to step 2.',
-            workerId: savedWorker._id
-        });
-    } catch (error) {
-        console.error("Error adding worker:", {
-            errorMessage: error.message,
-            stack: error.stack,
-            code: error.code
-        });
-
-        // Check for duplicate email error
-        if (error.code === 11000) {
-            return res.status(409).json({ message: 'Email already exists' });
-        }
-
-        // General error handling
-        return res.status(500).json({ message: 'Error adding worker' });
-    }
-};
-
-const signupwstep2= async (req, res) => {
-    let { workerId } = req.params;
-    const { streetName, town, city, areas } = req.body;
-
     try {
         workerId = workerId.replace(/^:/, '');  // هذه الدالة ستزيل النقطتين في حال كانت في بداية المعرف
 
@@ -244,11 +223,33 @@ const signupwstep2= async (req, res) => {
         if (!worker) {
             return res.status(404).json({ message: 'Worker not found.' });
         }
-
+        if (!Array.isArray(skills)) {
+            return res.status(400).json({ message: 'Skills must be an array' });
+        }
+    
+        if (!skills.every(skill => allowedSkills.includes(skill))) {
+            return res.status(400).json({ 
+                message: 'اختر مهارات لها علاقة بأعمال الأرض',
+                allowedSkills
+            });
+        }
+    
+        if (!Array.isArray(tools)) {
+            return res.status(400).json({ message: 'Tools must be an array' });
+        }
+    
+        if (!tools.every(tool => allowedTools.includes(tool))) {
+            return res.status(400).json({ 
+                message: 'اختر أدوات لها علاقة بأعمال الأرض',
+                allowedTools
+            });
+        }
         // تحديث بيانات الموقع وحالة التسجيل
         worker.streetName=  streetName ;
         worker.town= town ;
         worker.city=   city ;
+        worker.tools=  tools ;
+        worker.skills =   skills ;
 
         worker.areas = areas;
         worker.registrationCompleted = true;
